@@ -1,0 +1,30 @@
+{
+  "strategy_name": "CoralTrendMix",
+  "params": {
+    "trailing": {
+      "trailing_stop": false,
+      "trailing_stop_positive": null,
+      "trailing_stop_positive_offset": 0.0,
+      "trailing_only_offset_is_reached": false
+    },
+    // "buy": {
+    //   "buy_rsi": 48
+    // },
+    // "sell": {
+    //   "sell_rsi": 50
+    // },
+    "protection": {},
+    "roi": {
+      "60": 0.001,
+      "45": 0.002,
+      "30": 0.003,
+      "15": 0.004,
+      "0": 0.01
+    },
+    "stoploss": {
+      "stoploss": -0.20
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2022-07-29 21:59:41.094409+00:00"
+}
