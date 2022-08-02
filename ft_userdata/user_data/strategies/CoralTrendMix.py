@@ -2,16 +2,13 @@
 # flake8: noqa: F401
 # isort: skip_file
 # --- Do not remove these libs ---
-import math
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from pandas import DataFrame
 from freqtrade.persistence import Trade
+from coral_trend import *
 import datetime
-# from technical.indicators import *
-# from technical.utils import *
-# from coral_trend import get_coral_trend
-
+from technical.indicators.indicators import *
 from freqtrade.strategy import (BooleanParameter, CategoricalParameter, DecimalParameter,
                                 IStrategy, IntParameter)
 
@@ -50,16 +47,16 @@ class CoralTrendMix(IStrategy):
     # This attribute will be overridden if the config file contains "minimal_roi".
     # ROI table:
     minimal_roi = {
-        "0": 0.293,
-        "116": 0.099,
-        "178": 0.032,
-        "525": 0
+        "0": 0.164,
+        "111": 0.117,
+        "263": 0.058,
+        "480": 0
     }
 
     # MY INDICATORS
     # SAR parameters
     sar_parameters = {
-        "acceleration": 0.08,
+        "acceleration": 0.04,
         "maximum": 0.2,
         "afstep": 0.03,
         "aflimit": 0.03,
@@ -70,23 +67,24 @@ class CoralTrendMix(IStrategy):
     # Coral Parameters
     fast_coral_trend_parameters = {
         "fast_sm": 30,
-        "fast_cd": 0.2
+        "fast_cd": 0.7
     }
 
     medium_coral_trend_parameters = {
-        "medium_sm": 50,
-        "medium_cd": 0.4
+        "medium_sm": 35,
+        "medium_cd": 0.3
     }
 
     slow_coral_trend_parameters = {
-        "slow_sm": 190,
-        "slow_cd": 0.8
+        "slow_sm": 300,
+        "slow_cd": 0.444
     }
 
     pmax_parameters = {
-        "period": 5, 
-        "multiplier": 8, 
-        "length": 10
+        "period": 10, 
+        "multiplier": 3, 
+        "length": 12,
+        "MAtype": 1
     }
     
 
@@ -95,7 +93,7 @@ class CoralTrendMix(IStrategy):
     # Optimal stoploss designed for the strategy.
     # This attribute will be overridden if the config file contains "stoploss".
     # Stoploss:
-    stoploss = -0.10
+    stoploss = -0.33
 
     # Trailing stoploss
     trailing_stop = False
@@ -178,22 +176,22 @@ class CoralTrendMix(IStrategy):
     #     return is_green(dataframe['bfr_fast']) # High winrate
 
     def is_uptrend(self, dataframe) -> bool:
-        return (dataframe['pmax'] == 'up') & (dataframe['bfr_slow'] < dataframe['ema3']) #& (dataframe['bfr_medium'] < dataframe['ema3'])
+        return (dataframe['PMAX'] == 'up') #& (dataframe['bfr_fast'] < dataframe['ema3']) #& (dataframe['bfr_medium'] < dataframe['ema3'])
 
     # def should_long(dataframe) -> bool:
     #     return is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
 
     def should_long(self, dataframe) -> bool:
-        return self.is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['sar'])
+        return self.is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_slow'])
 
     # def is_downtrend(dataframe) -> bool:
     #     return is_red(dataframe['bfr_fast'])
 
     def is_downtrend(self, dataframe) -> bool:
-        return (dataframe['pmax'] == 'down') & (dataframe['bfr_slow'] > dataframe['low']) #& (dataframe['bfr_medium'] > dataframe['low'])
+        return (dataframe['PMAX'] == 'down') ##& (dataframe['bfr_fast'] > dataframe['ema3']) #& (dataframe['bfr_medium'] > dataframe['low'])
 
     def should_short(self, dataframe) -> bool:
-        return self.is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['sar'])
+        return self.is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_slow'])
 
     # def should_short(dataframe) -> bool:
     #     return is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
@@ -231,22 +229,6 @@ class CoralTrendMix(IStrategy):
         # RSI
         dataframe['rsi'] = ta.RSI(dataframe)
 
-        # TEMA - Triple Exponential Moving Average
-        dataframe['tema'] = ta.TEMA(dataframe, timeperiod=9)
-
-        # Bollinger Bands
-        bollinger = qtpylib.bollinger_bands(qtpylib.typical_price(dataframe), window=20, stds=2)
-        dataframe['bb_lowerband'] = bollinger['lower']
-        dataframe['bb_middleband'] = bollinger['mid']
-        dataframe['bb_upperband'] = bollinger['upper']
-        dataframe["bb_percent"] = (
-            (dataframe["close"] - dataframe["bb_lowerband"]) /
-            (dataframe["bb_upperband"] - dataframe["bb_lowerband"])
-        )
-        dataframe["bb_width"] = (
-            (dataframe["bb_upperband"] - dataframe["bb_lowerband"]) / dataframe["bb_middleband"]
-        )
-
         # MACD
         # macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
         # dataframe['macd'] = macd['macd']
@@ -272,9 +254,17 @@ class CoralTrendMix(IStrategy):
         dataframe['eplimit'] = eplimit
         dataframe['sar'] = ta.SAR(dataframe, acceleration=acceleration, maximum=maximum, afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
 
-        #Psar
-        dataframe['pmax'] = PMAX(dataframe, period=self.pmax_parameters['period'], multiplier=self.pmax_parameters['multiplier'], length=self.pmax_parameters['length'])
-        # print(dataframe['pmax'])
+        #PMAX
+        pmax_period = self.pmax_parameters["period"]
+        pmax_multiplier = self.pmax_parameters["multiplier"]
+        pmax_length = self.pmax_parameters["length"]
+        pmax_MAtype = self.pmax_parameters["MAtype"]
+        dataframe = PMAX(dataframe, period=pmax_period, multiplier=pmax_multiplier, length=pmax_length, MAtype=pmax_MAtype)
+        pm = "pm_" + str(pmax_period) + "_" + str(pmax_multiplier) + "_" + str(pmax_length) + "_" + str(pmax_MAtype)
+        pmx = "pmX_" + str(pmax_period) + "_" + str(pmax_multiplier) + "_" + str(pmax_length) + "_" + str(pmax_MAtype)
+        dataframe['PMAX'] = dataframe[pmx]
+        print(dataframe[pmx])
+        print(dataframe[pm])
 
         # #############################################################################
         # ###################### Coral Trend Indicator ################################
@@ -326,221 +316,3 @@ class CoralTrendMix(IStrategy):
         """
 
         return dataframe
-    
-def coral_trend(dataframe: DataFrame, sm: int, cd: int) -> DataFrame:
-    di = (sm - 1.0) / 2.0 + 1.0
-    c1 = 2.0 / (di + 1.0)
-    c2 = 1.0 - c1
-    c3 = 3.0 * (cd * cd + cd * cd * cd)
-    c4 = -3.0 * (2.0 * cd * cd + cd + cd * cd * cd)
-    c5 = 3.0 * cd + 1.0 + cd * cd * cd + 3.0 * cd * cd
-
-    dataframe['bfr'] = 0.0
-
-    for index in range(1,7):
-        dataframe['i'+ str(index)] = 0.0
-
-    for index, row in dataframe.iterrows():
-        if index == 0:
-            row ['i1'] = c1*row['close']
-            row['i2'] = c1*row ['i1']
-            row['i3'] = c1*row['i2']
-            row['i4'] = c1*row['i3']
-            row['i5'] = c1*row['i4']
-            row['i6'] = c1*row['i5']
-        else:
-            prevRow = dataframe.loc[index-1]
-            row['i1'] = c1*row['close'] + c2*prevRow['i1']
-            row['i2'] = c1*row['i1'] + c2*prevRow['i2']
-            row['i3'] = c1*row['i2'] + c2*prevRow['i3']
-            row['i4'] = c1*row['i3'] + c2*prevRow['i4']
-            row['i5'] = c1*row['i4'] + c2*prevRow['i5']
-            row['i6'] = c1*row['i5'] + c2*prevRow['i6']
-
-        dataframe.loc[index] = row
-        dataframe.loc[index, 'bfr'] = -cd*cd*cd*dataframe.loc[index,'i6'] + c3*(dataframe.loc[index,'i5']) + c4*(dataframe.loc[index,'i4']) + c5*(dataframe.loc[index,'i3'])
-        
-    # print (dataframe[['bfr', 'i1', 'i2', 'i3', 'i4', 'i5', 'i6']])
-    return dataframe['bfr']
-
-def psar(dataframe: DataFrame, increment: float, maximum: float, length: int = 100, deviation: float = 1.9) -> DataFrame:
-    """
-    PSAR indicator
-    Still incomplete
-    """
-    dataframe['psar'] = ta.SAR(dataframe, increment, maximum)
-    dataframe['cp'] = dataframe['psar'] 
-    dataframe['lreg'] = ta.LINEARREG(dataframe['cp'], length)
-    dataframe['lreg_x'] = ta.LINEARREG(dataframe['cp'], length)
-    dataframe['b'] = dataframe.index
-    dataframe['s'] = dataframe['lreg'] - dataframe['lreg_x']
-    dataframe['intr'] = dataframe['lreg'] - dataframe['b'] * dataframe['s']
-    dataframe['dS'] = 0.0
-
-    for i in range (0, length):
-        dataframe['pw'] = dataframe['cp'].shift(i) - (dataframe['s']*(dataframe['b']-i) + dataframe['intr'])
-        dataframe['dS'] = dataframe['dS'] + dataframe['pw'].pow(2)
-
-    dataframe['de'] = np.sqrt(dataframe['dS']/length)
-    dataframe['up'] = (-1*dataframe['de'] * deviation) + dataframe['psar']
-    dataframe['down'] = (dataframe['de'] * deviation) + dataframe['psar']
-
-    dataframe['up_t'] = 0.0
-    dataframe['down_t'] = 0.0
-    dataframe['trend'] = 0
-    dataframe['r_line'] = 0
-
-    # for index, row in dataframe.iterrows():
-    #     if index == 0:
-    #         row['up_t'] = row['up']
-    #         row['down_t'] = row['down']
-    #     else:
-    # for index, row in dataframe.iterrows():
-    #     if index == 0:
-    #         row['up_t'] = row['up']
-    #         row['down_t'] = row['down']
-    #     else:
-    #         prevRow = dataframe.loc[index-1]
-    #         if prevRow['close'] > prevRow['up_t']:
-    #             row['up_t'] = np.maximum(row['up'], prevRow['up_t'])
-    #         else:
-    #             row['up_t'] = row['up']
-            
-    #         if prevRow['close'] < prevRow['down_t']:
-    #             row['down_t'] = np.minimum(row['down'], prevRow['down_t'])
-    #         else:
-    #             row['down_t'] = row['down']
-        
-    #     dataframe.loc[index] = row        
-    
-    # dataframe['trend'] = -1
-
-    # for index, row in dataframe.iterrows():
-    #     if index == 0:
-    #         row['trend'] = 1
-    #     else:
-    #         prevRow = dataframe.loc[index-1]
-    #         if row['close'] > prevRow['down_t']:
-    #             row['trend'] = 1
-    #         elif row['close'] < prevRow['up_t']:
-    #             row['trend'] = -1
-    #         else:
-    #             row['trend'] = prevRow['trend']
-                                                                    
-    # dataframe['r_line'] = 0
-    # for index, row in dataframe.iterrows():
-    #     if index == 0:
-    #         row['r_line'] = 1
-    #     else:
-    #         prevRow = dataframe.loc[index-1]
-    #         if row['trend'] == 1:
-    #             row['r_line'] = row['up_t']
-    #         else:
-    #             row['r_line'] = row['down_t']
-
-    #     dataframe.loc[index] = row
-    
-    return dataframe['r_line']
-
-def PMAX(dataframe, period = 10, multiplier = 3, length=12, MAtype=1 ):
-    """
-    Function to compute SuperTrend
-    
-    Args :
-        df : Pandas DataFrame which contains ['date', 'open', 'high', 'low', 'close', 'volume'] columns
-        period : Integer indicates the period of computation in terms of number of candles
-        multiplier : Integer indicates value to multiply the ATR
-        length: moving averages length
-        MAtype: type of the moving averafe 1 EMA 2 DEMA 3 T3 4 SMA 5 VIDYA
-        
-    Returns :
-        df : Pandas DataFrame with new columns added for 
-            True Range (TR), ATR (ATR_$period)
-            PMAX (pm_$period_$multiplier_$length_$Matypeint)
-            PMAX Direction (pmX_$period_$multiplier_$length_$Matypeint)
-    """
-    import talib.abstract as ta
-    df = dataframe.copy()
-    mavalue = 'MA_' + str(length)
-    atr = 'ATR_' + str(period)
-    df[atr]=ta.ATR(df , timeperiod = period)
-    pm = 'pm_' + str(period) + '_' + str(multiplier) + '_' + str(length) + '_' + str(MAtype)
-    pmx = 'pmX_' + str(period) + '_' + str(multiplier) + '_' + str(length) + '_' + str(MAtype)   
-    """
-    Pmax Algorithm :
-
-        BASIC UPPERBAND = MA + Multiplier * ATR
-        BASIC LOWERBAND = MA - Multiplier * ATR
-        
-        FINAL UPPERBAND = IF( (Current BASICUPPERBAND < Previous FINAL UPPERBAND) or (Previous Close > Previous FINAL UPPERBAND))
-                            THEN (Current BASIC UPPERBAND) ELSE Previous FINALUPPERBAND)
-        FINAL LOWERBAND = IF( (Current BASIC LOWERBAND > Previous FINAL LOWERBAND) or (Previous Close < Previous FINAL LOWERBAND)) 
-                            THEN (Current BASIC LOWERBAND) ELSE Previous FINAL LOWERBAND)
-        
-        PMAX = IF((Previous PMAX = Previous FINAL UPPERBAND) and (Current Close <= Current FINAL UPPERBAND)) THEN
-                        Current FINAL UPPERBAND
-                    ELSE
-                        IF((Previous PMAX = Previous FINAL UPPERBAND) and (Current Close > Current FINAL UPPERBAND)) THEN
-                            Current FINAL LOWERBAND
-                        ELSE
-                            IF((Previous PMAX = Previous FINAL LOWERBAND) and (Current Close >= Current FINAL LOWERBAND)) THEN
-                                Current FINAL LOWERBAND
-                            ELSE
-                                IF((Previous PMAX = Previous FINAL LOWERBAND) and (Current Close < Current FINAL LOWERBAND)) THEN
-                                    Current FINAL UPPERBAND
-    
-    """
-    # MAtype==1 --> EMA
-    # MAtype==2 --> DEMA
-    # MAtype==3 --> T3
-    # MAtype==4 --> SMA
-    # MAtype==5 --> VIDYA
-    # MAtype==6 --> TEMA
-    # MAtype==7 --> WMA
-    # MAtype==8 --> VWMA
-    # Compute basic upper and lower bands
-    if MAtype==1:
-        df[mavalue]=ta.EMA(df , timeperiod = length)
-    elif MAtype==2:
-        df[mavalue]=ta.DEMA(df , timeperiod = length)
-    elif MAtype==3:
-        df[mavalue]=ta.T3(df , timeperiod = length)
-    elif MAtype==4:
-        df[mavalue]=ta.SMA(df , timeperiod = length)
-    elif MAtype==5:
-        df[mavalue]= VIDYA(df , length= length)
-    elif MAtype==6:
-        df[mavalue]= ta.TEMA(df , timeperiod = length)
-    elif MAtype==7:
-        df[mavalue]= ta.WMA(df , timeperiod = length)
-    elif MAtype==8:
-        df[mavalue]= vwma(df , length)                        
-    # Compute basic upper and lower bands
-    df['basic_ub'] = df[mavalue] + multiplier * df[atr]
-    df['basic_lb'] = df[mavalue] - multiplier * df[atr]
-    # Compute final upper and lower bands
-    df['final_ub'] = 0.00
-    df['final_lb'] = 0.00
-    for i in range(period, len(df)):
-        df['final_ub'].iat[i] = df['basic_ub'].iat[i] if df['basic_ub'].iat[i] < df['final_ub'].iat[i - 1] or df[mavalue].iat[i - 1] > df['final_ub'].iat[i - 1] else df['final_ub'].iat[i - 1]
-        df['final_lb'].iat[i] = df['basic_lb'].iat[i] if df['basic_lb'].iat[i] > df['final_lb'].iat[i - 1] or df[mavalue].iat[i - 1] < df['final_lb'].iat[i - 1] else df['final_lb'].iat[i - 1]
-       
-    # Set the Pmax value
-    df[pm] = 0.00
-    for i in range(period, len(df)):
-        df[pm].iat[i] = df['final_ub'].iat[i] if df[pm].iat[i - 1] == df['final_ub'].iat[i - 1] and df[mavalue].iat[i] <= df['final_ub'].iat[i] else \
-                        df['final_lb'].iat[i] if df[pm].iat[i - 1] == df['final_ub'].iat[i - 1] and df[mavalue].iat[i] >  df['final_ub'].iat[i] else \
-                        df['final_lb'].iat[i] if df[pm].iat[i - 1] == df['final_lb'].iat[i - 1] and df[mavalue].iat[i] >= df['final_lb'].iat[i] else \
-                        df['final_ub'].iat[i] if df[pm].iat[i - 1] == df['final_lb'].iat[i - 1] and df[mavalue].iat[i] <  df['final_lb'].iat[i] else 0.00 
-                 
-    # Mark the trend direction up/down
-    df['pmx'] = np.where((df[pm] > 0.00), np.where((df['close'] < df[pm]), 'down',  'up'), np.NaN)
-
-    # Remove basic and final bands from the columns
-    df.drop(['basic_ub', 'basic_lb', 'final_ub', 'final_lb'], inplace=True, axis=1)
-    
-    df.fillna(0, inplace=True)
-    print (df['pmx'])
-
-    return df['pmx']
-
