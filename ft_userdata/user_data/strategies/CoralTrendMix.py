@@ -48,22 +48,59 @@ class CoralTrendMix(IStrategy):
 
     # Minimal ROI designed for the strategy.
     # This attribute will be overridden if the config file contains "minimal_roi".
+    # ROI table:
     minimal_roi = {
-        "0": 0.435,
-        "46": 0.147,
-        "196": 0.052,
+        "0": 0.293,
+        "116": 0.099,
+        "178": 0.032,
         "525": 0
     }
 
+    # MY INDICATORS
+    # SAR parameters
+    sar_parameters = {
+        "acceleration": 0.08,
+        "maximum": 0.2,
+        "afstep": 0.03,
+        "aflimit": 0.03,
+        "epstep": 0.03,
+        "eplimit": 0.3,
+    }
+
+    # Coral Parameters
+    fast_coral_trend_parameters = {
+        "fast_sm": 30,
+        "fast_cd": 0.2
+    }
+
+    medium_coral_trend_parameters = {
+        "medium_sm": 50,
+        "medium_cd": 0.4
+    }
+
+    slow_coral_trend_parameters = {
+        "slow_sm": 190,
+        "slow_cd": 0.8
+    }
+
+    pmax_parameters = {
+        "period": 5, 
+        "multiplier": 8, 
+        "length": 10
+    }
+    
+
+    # END OF MY INDICATORS
+
     # Optimal stoploss designed for the strategy.
     # This attribute will be overridden if the config file contains "stoploss".
-    stoploss = -0.228
-    # stoploss = -0.1
+    # Stoploss:
+    stoploss = -0.10
 
     # Trailing stoploss
     trailing_stop = False
     # trailing_only_offset_is_reached = False
-    # trailing_stop_positive = 0.10
+    trailing_stop_positive = 0.01
     # trailing_stop_positive_offset = 0.0  # Disabled / not configured
 
     # Optimal timeframe for the strategy.
@@ -73,22 +110,9 @@ class CoralTrendMix(IStrategy):
     process_only_new_candles = False
 
     # These values can be overridden in the config.
-    use_exit_signal = True
+    use_exit_signal = False
     exit_profit_only = False
-    ignore_roi_if_entry_signal = False
-
-    # Hyperoptable parameters
-    buy_rsi = IntParameter(low=1, high=50, default=30, space='buy', optimize=True, load=True)
-    sell_rsi = IntParameter(low=50, high=100, default=70, space='sell', optimize=True, load=True)
-    short_rsi = IntParameter(low=51, high=100, default=70, space='sell', optimize=True, load=True)
-    exit_short_rsi = IntParameter(low=1, high=50, default=30, space='buy', optimize=True, load=True)
-
-    # dataframe['fast_sm'] = fast_sm
-    # dataframe['fast_cd'] = fast_cd
-    # dataframe['slow_sm'] = slow_sm
-    # dataframe['slow_cd'] = slow_cd
-    # dataframe['bfr_fast'] = coral_trend(dataframe, fast_sm, fast_cd)
-    # dataframe['bfr_slow'] = coral_trend(dataframe, slow_sm, slow_cd)
+    ignore_roi_if_entry_signal = True
 
     # Number of candles the strategy requires before producing valid signals
     startup_candle_count: int = 20
@@ -98,7 +122,7 @@ class CoralTrendMix(IStrategy):
         'entry': 'limit',
         'exit': 'limit',
         'stoploss': 'market',
-        'stoploss_on_exchange': False
+        'stoploss_on_exchange': True
     }
 
     # Optional order time in force.
@@ -123,7 +147,7 @@ class CoralTrendMix(IStrategy):
         }
     }
 
-    use_custom_stoploss = False
+    use_custom_stoploss = True
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
@@ -149,6 +173,43 @@ class CoralTrendMix(IStrategy):
         """
         return []
 
+
+    # def is_uptrend(dataframe) -> bool:
+    #     return is_green(dataframe['bfr_fast']) # High winrate
+
+    def is_uptrend(self, dataframe) -> bool:
+        return (dataframe['pmax'] == 'up') & (dataframe['bfr_slow'] < dataframe['ema3']) #& (dataframe['bfr_medium'] < dataframe['ema3'])
+
+    # def should_long(dataframe) -> bool:
+    #     return is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
+
+    def should_long(self, dataframe) -> bool:
+        return self.is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['sar'])
+
+    # def is_downtrend(dataframe) -> bool:
+    #     return is_red(dataframe['bfr_fast'])
+
+    def is_downtrend(self, dataframe) -> bool:
+        return (dataframe['pmax'] == 'down') & (dataframe['bfr_slow'] > dataframe['low']) #& (dataframe['bfr_medium'] > dataframe['low'])
+
+    def should_short(self, dataframe) -> bool:
+        return self.is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['sar'])
+
+    # def should_short(dataframe) -> bool:
+    #     return is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
+
+    def is_green(self, dataframe_1d) -> bool:
+        return np.greater(dataframe_1d, dataframe_1d.shift(1))
+
+    def is_red(self, dataframe_1d) -> bool:
+        return np.less(dataframe_1d, dataframe_1d.shift(1))
+
+    def green_to_red(self, dataframe_1d) -> bool:
+        return self.is_green(dataframe_1d) & self.is_red(dataframe_1d.shift(1))
+
+    def red_to_green(self, dataframe_1d) -> bool:
+        return self.is_red(dataframe_1d) & self.is_green(dataframe_1d.shift(1))
+    
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
         Adds several different TA indicators to the given DataFrame
@@ -198,12 +259,12 @@ class CoralTrendMix(IStrategy):
         dataframe['ema21'] = ta.EMA(dataframe['ohlc4'], timeperiod=21)
 
         # Parabolic SAR
-        acceleration = 0.04
-        maximum = 0.2
-        afstep=0.03
-        aflimit = 0.03
-        epstep = 0.03
-        eplimit = 0.3
+        acceleration = self.sar_parameters["acceleration"]
+        maximum = self.sar_parameters["maximum"]
+        afstep = self.sar_parameters["afstep"]
+        aflimit = self.sar_parameters["aflimit"]
+        epstep = self.sar_parameters["epstep"]
+        eplimit = self.sar_parameters["eplimit"]
         dataframe['acceleration'] = acceleration
         dataframe['afstep'] = maximum
         dataframe['aflimit'] = afstep
@@ -212,18 +273,17 @@ class CoralTrendMix(IStrategy):
         dataframe['sar'] = ta.SAR(dataframe, acceleration=acceleration, maximum=maximum, afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
 
         #Psar
-        # dataframe['r_line'] = psar(dataframe, increment=acceleration, maximum=maximum)
-        dataframe['pmax'] = PMAX(dataframe, period=10)
-        print(dataframe['pmax'])
+        dataframe['pmax'] = PMAX(dataframe, period=self.pmax_parameters['period'], multiplier=self.pmax_parameters['multiplier'], length=self.pmax_parameters['length'])
+        # print(dataframe['pmax'])
 
         # #############################################################################
         # ###################### Coral Trend Indicator ################################
-        fast_sm = 10
-        fast_cd = 0.6
-        medium_sm = 40
-        medium_cd = 0.9
-        slow_sm = 130
-        slow_cd = 0.8
+        fast_sm = self.fast_coral_trend_parameters["fast_sm"]
+        fast_cd = self.fast_coral_trend_parameters["fast_cd"]
+        medium_sm = self.medium_coral_trend_parameters["medium_sm"]
+        medium_cd = self.medium_coral_trend_parameters["medium_cd"]
+        slow_sm = self.slow_coral_trend_parameters["slow_sm"]
+        slow_cd = self.slow_coral_trend_parameters["slow_cd"]
         dataframe['fast_sm'] = fast_sm
         dataframe['fast_cd'] = fast_cd
         dataframe['medium_sm'] = medium_sm
@@ -245,13 +305,13 @@ class CoralTrendMix(IStrategy):
         """
         dataframe.loc[
             (
-                should_buy(dataframe)
+                self.should_long(dataframe)
             ),
             'enter_long'] = 1
 
         dataframe.loc[
             (
-                should_sell(dataframe)
+                self.should_short(dataframe)
             ),
             'enter_short'] = 1
 
@@ -264,17 +324,6 @@ class CoralTrendMix(IStrategy):
         :param metadata: Additional information, like the currently traded pair
         :return: DataFrame with exit columns populated
         """
-        # dataframe.loc[
-        #     (
-        #         (qtpylib.crossed_above(dataframe['bfr_fast'], dataframe['ema3'])) 
-        #     ),
-        #     'exit_long'] = 1
-
-        # dataframe.loc[
-        #     (
-        #         (qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_fast'])) 
-        #     ),
-        #     'exit_short'] = 1
 
         return dataframe
     
@@ -317,6 +366,7 @@ def coral_trend(dataframe: DataFrame, sm: int, cd: int) -> DataFrame:
 def psar(dataframe: DataFrame, increment: float, maximum: float, length: int = 100, deviation: float = 1.9) -> DataFrame:
     """
     PSAR indicator
+    Still incomplete
     """
     dataframe['psar'] = ta.SAR(dataframe, increment, maximum)
     dataframe['cp'] = dataframe['psar'] 
@@ -494,38 +544,3 @@ def PMAX(dataframe, period = 10, multiplier = 3, length=12, MAtype=1 ):
 
     return df['pmx']
 
-# def is_bullish_trend(dataframe) -> bool:
-#     return is_green(dataframe['bfr_fast']) # High winrate
-
-def is_bullish_trend(dataframe) -> bool:
-    return (dataframe['pmax'] == 'up') & (dataframe['bfr_slow'] < dataframe['ema3']) #& (dataframe['bfr_medium'] < dataframe['ema3'])
-
-# def should_buy(dataframe) -> bool:
-#     return is_bullish_trend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
-
-def should_buy(dataframe) -> bool:
-    return is_bullish_trend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['sar'])
-
-# def is_bearish_trend(dataframe) -> bool:
-#     return is_red(dataframe['bfr_fast'])
-
-def is_bearish_trend(dataframe) -> bool:
-    return (dataframe['pmax'] == 'down') & (dataframe['bfr_slow'] > dataframe['low']) #& (dataframe['bfr_medium'] > dataframe['low'])
-
-def should_sell(dataframe) -> bool:
-    return is_bearish_trend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['sar'])
-
-# def should_sell(dataframe) -> bool:
-#     return is_bearish_trend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
-
-def is_green(dataframe_1d) -> bool:
-    return np.greater(dataframe_1d, dataframe_1d.shift(1))
-
-def is_red(dataframe_1d) -> bool:
-    return np.less(dataframe_1d, dataframe_1d.shift(1))
-
-def green_to_red(dataframe_1d) -> bool:
-    return is_green(dataframe_1d) & is_red(dataframe_1d.shift(1))
-
-def red_to_green(dataframe_1d) -> bool:
-    return is_red(dataframe_1d) & is_green(dataframe_1d.shift(1))
