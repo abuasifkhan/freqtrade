@@ -69,47 +69,79 @@ class CoralTrendMixHyperOpt(IStrategy):
     # Run "populate_indicators()" only for new candle.
     process_only_new_candles = True
 
-    # These values can be overridden in the config.
-    use_exit_signal = True
-    exit_profit_only = False
-    ignore_roi_if_entry_signal = True
 
     # Hyperoptable parameters
     # buy_adx_threshold = DecimalParameter(10, 40, decimals=2, default=20)
     # buy_adx_enabled = BooleanParameter(default=False)
 
-    fast_sm_value = CategoricalParameter([7, 10, 14, 21], default=14, space='buy')
+    fast_sm_value = CategoricalParameter([7, 10, 14, 21, 30], default=30, space='buy')
     fast_cd_value = DecimalParameter(0.2, 1.0, decimals=1, default=0.8, space='buy')
-    medium_sm_value =  CategoricalParameter([30, 35, 40, 50], default=50, space='buy')
+    medium_sm_value =  CategoricalParameter([30, 35, 40, 50, 80, 100], default=50, space='buy')
     medium_cd_value =  DecimalParameter(0.2, 1.0, decimals=1, default=0.4, space='buy')
-    # self.fast_period_value.value, slowperiod=self.slow_period_value.value, signalperiod=self.signal_value.value
+    shouldIgnoreRoi = BooleanParameter(default=False, space='buy')
 
     use_macd = CategoricalParameter([True, False], default=False, space='buy')
     fast_period_value = CategoricalParameter([7, 10, 14, 21, 30, 50], default=14, space='buy')
     slow_period_value = CategoricalParameter([25, 30, 35, 40, 50, 100, 120, 150, 160, 180, 200, 250, 300], default=50, space='buy')
     signal_value = CategoricalParameter([9, 18, 24, 30, 40, 50], default=14, space='buy')
 
-    # slow_sm_value = CategoricalParameter([200, 300, 400, 500, 600], default=300)
-    # slow_cd_value = DecimalParameter(0.2, 1.0, decimals=1, default=0.8)
+    pmx_period = CategoricalParameter([5, 10, 15, 20, 25, 30], default=5, space='buy')
+    pmx_multiplier = CategoricalParameter([3,4,5,6,7,8,9,10], default=8, space='buy')
+    pmx_length = CategoricalParameter([10, 12, 15, 20, 25, 30], default=10, space='buy')
 
-    sar_accelaretion = CategoricalParameter([0.02, 0.04, 0.06, 0.08, 0.1], default=0.02, space='buy')
+    slow_sm_value = CategoricalParameter([200, 300, 400, 500, 600], default=300)
+    slow_cd_value = DecimalParameter(0.2, 1.0, decimals=1, default=0.8)
+
+    sar_accelaretion = CategoricalParameter([0.02, 0.04, 0.06, 0.08, 0.1], default=0.08, space='buy')
 
     fast_period_value = CategoricalParameter([6, 12, 18, 24, 30, 36, 42, 48], default=6)
     slow_period_value = CategoricalParameter([50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 300, 400, 500], default=50, space='sell')
     signal_value = CategoricalParameter([9, 18, 27, 36, 45], default=9)
     
-    buy_trigger = CategoricalParameter(["medium_bfr_ema_cross", "medium_bfr_color_change", "macd_crossover"], default="medium_bfr_ema_cross", space="buy")
-    sell_trigger = CategoricalParameter(["medium_bfr_ema_cross", "medium_bfr_color_change", "macd_crossover"], default="medium_bfr_ema_cross", space="sell")
+    buy_trigger = CategoricalParameter(["fast_bfr_ema_cross", "medium_bfr_ema_cross", "medium_bfr_color_change", "macd_crossover", "sar_ema_cross"], default="medium_bfr_ema_cross", space="buy")
+    sell_trigger = CategoricalParameter(["fast_bfr_ema_cross", "medium_bfr_ema_cross", "medium_bfr_color_change", "macd_crossover", "sar_ema_cross"], default="medium_bfr_ema_cross", space="sell")
 
-    # dataframe['fast_sm'] = fast_sm
-    # dataframe['fast_cd'] = fast_cd
-    # dataframe['slow_sm'] = slow_sm
-    # dataframe['slow_cd'] = slow_cd
-    # dataframe['bfr_fast'] = coral_trend(dataframe, fast_sm, fast_cd)
-    # dataframe['bfr_slow'] = coral_trend(dataframe, slow_sm, slow_cd)
+    # These values can be overridden in the config.
+    use_exit_signal = True
+    exit_profit_only = False
+    ignore_roi_if_entry_signal = shouldIgnoreRoi.value
 
     # Number of candles the strategy requires before producing valid signals
     startup_candle_count: int = 100
+
+    # MY INDICATORS
+    # SAR parameters
+    sar_parameters = {
+        "acceleration": sar_accelaretion.value,
+        "maximum": 0.2,
+        "afstep": 0.03,
+        "aflimit": 0.03,
+        "epstep": 0.03,
+        "eplimit": 0.3,
+    }
+
+    # Coral Parameters
+    fast_coral_trend_parameters = {
+        "fast_sm": fast_sm_value.value,
+        "fast_cd": fast_cd_value.value
+    }
+
+    medium_coral_trend_parameters = {
+        "medium_sm": medium_sm_value.value,
+        "medium_cd": medium_cd_value.value
+    }
+
+    slow_coral_trend_parameters = {
+        "slow_sm": slow_sm_value.value,
+        "slow_cd": medium_cd_value.value
+    }
+
+    pmax_parameters = {
+        "period": pmx_period.value,
+        "multiplier": pmx_multiplier.value, 
+        "length": pmx_length.value
+    }
+    # END OF MY INDICATORS
 
     # Optional order type mapping.
     order_types = {
@@ -166,6 +198,43 @@ class CoralTrendMixHyperOpt(IStrategy):
                             ]
         """
         return []
+
+
+    # def is_uptrend(dataframe) -> bool:
+    #     return is_green(dataframe['bfr_fast']) # High winrate
+
+    def is_uptrend(self, dataframe) -> bool:
+        return (dataframe['pmax'] == 'up') & (dataframe['bfr_fast'] < dataframe['ema3']) #& (dataframe['bfr_medium'] < dataframe['ema3'])
+
+    # def should_long(dataframe) -> bool:
+    #     return is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
+
+    def should_long(self, dataframe) -> bool:
+        return self.is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['sar'])
+
+    # def is_downtrend(dataframe) -> bool:
+    #     return is_red(dataframe['bfr_fast'])
+
+    def is_downtrend(self, dataframe) -> bool:
+        return (dataframe['pmax'] == 'down') & (dataframe['bfr_fast'] > dataframe['ema3']) #& (dataframe['bfr_medium'] > dataframe['low'])
+
+    def should_short(self, dataframe) -> bool:
+        return self.is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['sar'])
+
+    # def should_short(dataframe) -> bool:
+    #     return is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
+
+    def is_green(self, dataframe_1d) -> bool:
+        return np.greater(dataframe_1d, dataframe_1d.shift(1))
+
+    def is_red(self, dataframe_1d) -> bool:
+        return np.less(dataframe_1d, dataframe_1d.shift(1))
+
+    def green_to_red(self, dataframe_1d) -> bool:
+        return self.is_green(dataframe_1d) & self.is_red(dataframe_1d.shift(1))
+
+    def red_to_green(self, dataframe_1d) -> bool:
+        return self.is_red(dataframe_1d) & self.is_green(dataframe_1d.shift(1))
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
@@ -231,72 +300,84 @@ class CoralTrendMixHyperOpt(IStrategy):
         dataframe['sar'] = ta.SAR(dataframe, acceleration=acceleration, maximum=maximum,
                                   afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
 
+        # # PMAX
+        dataframe['pmax'] = PMAX(dataframe, period=self.pmx_period.value, multiplier = self.pmx_period.value, length=self.pmx_length.value)
+        # print(dataframe['pmax'])
+
         # #############################################################################
         # ###################### Coral Trend Indicator ################################
         dataframe['fast_sm'] = self.fast_sm_value.value
         dataframe['fast_cd'] = self.fast_cd_value.value
         dataframe['medium_sm'] = self.medium_sm_value.value
         dataframe['medium_cd'] = self.medium_cd_value.value
-        # dataframe['slow_sm'] = self.slow_sm_value
-        # dataframe['slow_cd'] = self.slow_cd_value
         dataframe['bfr_fast'] = coral_trend(dataframe, self.fast_sm_value.value, self.fast_cd_value.value)
         dataframe['bfr_medium'] = coral_trend(dataframe, self.medium_sm_value.value, self.medium_cd_value.value)
-        # dataframe['bfr_slow'] = get_coral_trend(dataframe, self.slow_sm_value, self.slow_cd_value)
         # #############################################################################
         # ###################### End Coral Trend Indicator ################################
 
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        enter_condition = []
+        long_condition = []
 
         # GUARDS AND TRENDS
-        enter_condition.append(is_bullish_trend(dataframe))
+        long_condition.append(self.is_uptrend(dataframe))
+
         # TRIGGERS
-        if self.buy_trigger.value == "medium_bfr_ema_cross":
-            enter_condition.append(
-                qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium']) &
-                dataframe['sar'] < dataframe['ema3']
+        if self.buy_trigger.value == 'sar_ema_cross':
+            long_condition.append(
+                qtpylib.crossed_above(dataframe['ema3'], dataframe['sar'])
+            )
+        # elif self.buy_trigger.value == 'fast_bfr_ema_cross':
+        #     long_condition.append(
+        #         qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_fast'])
+        #     )
+        elif self.buy_trigger.value == "medium_bfr_ema_cross":
+            long_condition.append(
+                qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
             )
         elif self.buy_trigger.value == "medium_bfr_color_change":
-            enter_condition.append(
-                red_to_green(dataframe['bfr_medium'])  &
-                dataframe['sar'] < dataframe['ema3']
+            long_condition.append(
+                self.red_to_green(dataframe['bfr_medium'])
             )
         elif self.buy_trigger.value == "macd_crossover":
-            enter_condition.append(
-                qtpylib.crossed_above(dataframe['macd'], dataframe['macdsignal'])  &
-                dataframe['sar'] < dataframe['ema3']
+            long_condition.append(
+                qtpylib.crossed_above(dataframe['macd'], dataframe['macdsignal']) 
             )
 
-        if enter_condition:
+        if long_condition:
                 dataframe.loc[
-                    reduce(lambda x, y: x & y, enter_condition),
+                    reduce(lambda x, y: x & y, long_condition),
                     'enter_long'] = 1
         
-        exit_condition = []
+        short_condition = []
         # GUARDS AND TRENDS
-        exit_condition.append(is_bearish_trend(dataframe))
+        short_condition.append(self.is_downtrend(dataframe))
         # TRIGGERS
-        if self.sell_trigger.value == "medium_bfr_ema_cross":
-            exit_condition.append(
-                qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])  &
-                dataframe['sar'] > dataframe['ema3']
+        if self.sell_trigger.value == "sar_ema_cross":
+            short_condition.append(
+                qtpylib.crossed_above(dataframe['sar'], dataframe['ema3'])
+            )
+        # elif self.buy_trigger.value == 'fast_bfr_ema_cross':
+        #     long_condition.append(
+        #         qtpylib.crossed_above(dataframe['bfr_fast'], dataframe['ema3'])
+        #     )
+        elif self.sell_trigger.value == "medium_bfr_ema_cross":
+            short_condition.append(
+                qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
             )
         elif self.sell_trigger.value == "medium_bfr_color_change":
-            exit_condition.append(
-                green_to_red(dataframe['bfr_medium'])  &
-                dataframe['sar'] > dataframe['ema3']
+            short_condition.append(
+                self.green_to_red(dataframe['bfr_medium'])
             )
         elif self.sell_trigger.value == "macd_crossover":
-            exit_condition.append(
-                qtpylib.crossed_below(dataframe['macd'], dataframe['macdsignal'])  &
-                dataframe['sar'] > dataframe['ema3']
+            short_condition.append(
+                qtpylib.crossed_below(dataframe['macd'], dataframe['macdsignal'])
             )
         
-        if exit_condition:
+        if short_condition:
                 dataframe.loc[
-                    reduce(lambda x, y: x & y, exit_condition),
+                    reduce(lambda x, y: x & y, short_condition),
                     'enter_short'] = 1
 
         return dataframe
@@ -460,47 +541,12 @@ def PMAX(dataframe, period = 10, multiplier = 3, length=12, MAtype=1 ):
                         df['final_ub'].iat[i] if df[pm].iat[i - 1] == df['final_lb'].iat[i - 1] and df[mavalue].iat[i] <  df['final_lb'].iat[i] else 0.00 
                  
     # Mark the trend direction up/down
-    df['pmx'] = np.where((df[pm] > 0.00), np.where((df['close'] < df[pm]), 'down',  'up'), np.NaN)
+    df[pmx] = np.where((df[pm] > 0.00), np.where((df['close'] < df[pm]), 'down',  'up'), np.NaN)
 
     # Remove basic and final bands from the columns
     df.drop(['basic_ub', 'basic_lb', 'final_ub', 'final_lb'], inplace=True, axis=1)
     
     df.fillna(0, inplace=True)
-    print (df['pmx'])
+    print (df[pmx])
 
-    return df['pmx']
-
-# def is_bullish_trend(dataframe) -> bool:
-#     return is_green(dataframe['bfr_fast']) # High winrate
-
-def is_bullish_trend(dataframe) -> bool:
-    return (dataframe['pmax'] == 'up') & (dataframe['bfr_fast'] < dataframe['ema3']) & (dataframe['bfr_medium'] < dataframe['ema3'])
-
-# def should_buy(dataframe) -> bool:
-#     return is_bullish_trend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
-
-def should_buy(dataframe) -> bool:
-    return is_bullish_trend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['sar'])
-
-# def is_bearish_trend(dataframe) -> bool:
-#     return is_red(dataframe['bfr_fast'])
-
-def is_bearish_trend(dataframe) -> bool:
-    return (dataframe['pmax'] == 'down') & (dataframe['bfr_fast'] > dataframe['low']) & (dataframe['bfr_medium'] > dataframe['low'])
-def should_sell(dataframe) -> bool:
-    return is_bearish_trend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['sar'])
-
-# def should_sell(dataframe) -> bool:
-#     return is_bearish_trend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
-
-def is_green(dataframe_1d) -> bool:
-    return np.greater(dataframe_1d, dataframe_1d.shift(1))
-
-def is_red(dataframe_1d) -> bool:
-    return np.less(dataframe_1d, dataframe_1d.shift(1))
-
-def green_to_red(dataframe_1d) -> bool:
-    return is_green(dataframe_1d) & is_red(dataframe_1d.shift(1))
-
-def red_to_green(dataframe_1d) -> bool:
-    return is_red(dataframe_1d) & is_green(dataframe_1d.shift(1))
+    return df[pmx]
