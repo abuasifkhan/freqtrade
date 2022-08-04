@@ -47,10 +47,15 @@ class CoralTrendMix(IStrategy):
     # This attribute will be overridden if the config file contains "minimal_roi".
     # ROI table:
     minimal_roi = {
-        "0": 0.164,
-        "111": 0.117,
-        "263": 0.058,
-        "480": 0
+        "0": 0.294,
+        "37": 0.058,
+        "133": 0.028,
+        "493": 0
+    }
+
+    atr_parameters = {
+        "length": 16,
+        "threshold": 0.989
     }
 
     # MY INDICATORS
@@ -66,13 +71,13 @@ class CoralTrendMix(IStrategy):
 
     # Coral Parameters
     fast_coral_trend_parameters = {
-        "fast_sm": 30,
-        "fast_cd": 0.7
+        "fast_sm": 14,
+        "fast_cd": 0.4
     }
 
     medium_coral_trend_parameters = {
-        "medium_sm": 35,
-        "medium_cd": 0.3
+        "medium_sm": 100,
+        "medium_cd": 0.4
     }
 
     slow_coral_trend_parameters = {
@@ -81,19 +86,24 @@ class CoralTrendMix(IStrategy):
     }
 
     pmax_parameters = {
-        "period": 10, 
-        "multiplier": 3, 
-        "length": 12,
+        "period": 15, 
+        "multiplier": 4, 
+        "length": 15,
         "MAtype": 1
     }
-    
+
+    macd_parameters = {
+        "fast_period": 6,
+        "slow_period": 50,
+        "signal_period": 9,
+    }
 
     # END OF MY INDICATORS
 
     # Optimal stoploss designed for the strategy.
     # This attribute will be overridden if the config file contains "stoploss".
     # Stoploss:
-    stoploss = -0.33
+    stoploss = -0.171
 
     # Trailing stoploss
     trailing_stop = False
@@ -173,28 +183,31 @@ class CoralTrendMix(IStrategy):
 
 
     # def is_uptrend(dataframe) -> bool:
-    #     return is_green(dataframe['bfr_fast']) # High winrate
+    #     return is_green(dataframe['coral_fast']) # High winrate
 
     def is_uptrend(self, dataframe) -> bool:
-        return (dataframe['PMAX'] == 'up') #& (dataframe['bfr_fast'] < dataframe['ema3']) #& (dataframe['bfr_medium'] < dataframe['ema3'])
+        # return (dataframe['coral_medium'] < dataframe['ema3']) #& (dataframe['coral_fast'] < dataframe['ema3']) #&  (dataframe['PMAX'] == 'up')
+        return (dataframe['atrP'] > self.atr_parameters['threshold']) & (dataframe['coral_medium'] < dataframe['ema3']) &  (dataframe['pmax'] == 'up')
 
     # def should_long(dataframe) -> bool:
-    #     return is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_medium'])
+    #     return is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['coral_medium'])
 
     def should_long(self, dataframe) -> bool:
-        return self.is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['bfr_slow'])
+        return (self.is_uptrend(dataframe)) & (qtpylib.crossed_above(dataframe['ema3'], dataframe['coral_medium']))
 
     # def is_downtrend(dataframe) -> bool:
-    #     return is_red(dataframe['bfr_fast'])
+    #     return is_red(dataframe['coral_fast'])
 
     def is_downtrend(self, dataframe) -> bool:
-        return (dataframe['PMAX'] == 'down') ##& (dataframe['bfr_fast'] > dataframe['ema3']) #& (dataframe['bfr_medium'] > dataframe['low'])
+        # return (dataframe['coral_medium'] > dataframe['low']) #(dataframe['PMAX'] == 'down') ##& (dataframe['coral_fast'] > dataframe['ema3']) #& 
+        return (dataframe['atrP'] < self.atr_parameters['threshold']) & (dataframe['coral_medium'] > dataframe['ema3']) & (dataframe['pmax'] == 'down')
 
     def should_short(self, dataframe) -> bool:
-        return self.is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_slow'])
+        # return (self.is_downtrend(dataframe)) & (qtpylib.crossed_below(dataframe['ema3'], dataframe['coral_medium']))
+        return (self.is_downtrend(dataframe)) & (qtpylib.crossed_below(dataframe['ema3'], dataframe['coral_medium']))
 
     # def should_short(dataframe) -> bool:
-    #     return is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['bfr_medium'])
+    #     return is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['coral_medium'])
 
     def is_green(self, dataframe_1d) -> bool:
         return np.greater(dataframe_1d, dataframe_1d.shift(1))
@@ -202,11 +215,11 @@ class CoralTrendMix(IStrategy):
     def is_red(self, dataframe_1d) -> bool:
         return np.less(dataframe_1d, dataframe_1d.shift(1))
 
-    def green_to_red(self, dataframe_1d) -> bool:
-        return self.is_green(dataframe_1d) & self.is_red(dataframe_1d.shift(1))
+    def green_from_red(self, dataframe_1d) -> bool:
+        return self.is_red(dataframe_1d.shift(1)) & self.is_green(dataframe_1d)
 
-    def red_to_green(self, dataframe_1d) -> bool:
-        return self.is_red(dataframe_1d) & self.is_green(dataframe_1d.shift(1))
+    def red_from_green(self, dataframe_1d) -> bool:
+        return self.is_green(dataframe_1d.shift(1)) & self.is_red(dataframe_1d)
     
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
@@ -230,10 +243,14 @@ class CoralTrendMix(IStrategy):
         dataframe['rsi'] = ta.RSI(dataframe)
 
         # MACD
-        # macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
-        # dataframe['macd'] = macd['macd']
-        # dataframe['macdsignal'] = macd['macdsignal']
-        # dataframe['macdhist'] = macd['macdhist']
+        macd = ta.MACD(dataframe, fastperiod=12, slowperiod=26, signalperiod=9)
+        dataframe['macd'] = macd['macd']
+        dataframe['macdsignal'] = macd['macdsignal']
+        dataframe['macdhist'] = macd['macdhist']
+
+        # ATR
+        dataframe[f'atr'] = ta.ATR(dataframe, period=self.atr_parameters['length'])
+        dataframe[f'atrP'] = dataframe[f'atr'] / dataframe['close'].fillna(1)
 
         # # EMA - Exponential Moving Average
         dataframe['ohlc4'] = (dataframe['open'] + dataframe['high'] + dataframe['low'] + dataframe['close']) / 4.0
@@ -261,8 +278,8 @@ class CoralTrendMix(IStrategy):
         pmax_MAtype = self.pmax_parameters["MAtype"]
         dataframe = PMAX(dataframe, period=pmax_period, multiplier=pmax_multiplier, length=pmax_length, MAtype=pmax_MAtype)
         pm = "pm_" + str(pmax_period) + "_" + str(pmax_multiplier) + "_" + str(pmax_length) + "_" + str(pmax_MAtype)
-        pmx = "pmX_" + str(pmax_period) + "_" + str(pmax_multiplier) + "_" + str(pmax_length) + "_" + str(pmax_MAtype)
-        dataframe['PMAX'] = dataframe[pmx]
+        pmx = "pmax_" + str(pmax_period) + "_" + str(pmax_multiplier) + "_" + str(pmax_length) + "_" + str(pmax_MAtype)
+        dataframe['pmax'] = dataframe[pmx]
         print(dataframe[pmx])
         print(dataframe[pm])
 
@@ -274,15 +291,9 @@ class CoralTrendMix(IStrategy):
         medium_cd = self.medium_coral_trend_parameters["medium_cd"]
         slow_sm = self.slow_coral_trend_parameters["slow_sm"]
         slow_cd = self.slow_coral_trend_parameters["slow_cd"]
-        dataframe['fast_sm'] = fast_sm
-        dataframe['fast_cd'] = fast_cd
-        dataframe['medium_sm'] = medium_sm
-        dataframe['medium_cd'] = medium_cd
-        dataframe['slow_sm'] = slow_sm
-        dataframe['slow_cd'] = slow_cd
-        dataframe['bfr_fast'] = coral_trend(dataframe, fast_sm, fast_cd)
-        dataframe['bfr_medium'] = coral_trend(dataframe, medium_sm, medium_cd)
-        dataframe['bfr_slow'] = coral_trend(dataframe, slow_sm, slow_cd)
+        dataframe['coral_fast'] = coral_trend(dataframe, fast_sm, fast_cd)
+        dataframe['coral_medium'] = coral_trend(dataframe, medium_sm, medium_cd)
+        dataframe['coral_slow'] = coral_trend(dataframe, slow_sm, slow_cd)
 
         return dataframe
 
@@ -298,12 +309,16 @@ class CoralTrendMix(IStrategy):
                 self.should_long(dataframe)
             ),
             'enter_long'] = 1
+        
+        dataframe.loc[(
+            self.should_short(dataframe)
+        ), 'enter_short'] = 1
 
-        dataframe.loc[
-            (
-                self.should_short(dataframe)
-            ),
-            'enter_short'] = 1
+        # dataframe.loc[
+        #     (
+        #         self.should_short(dataframe)
+        #     ),
+        #     'enter_short'] = 1
 
         return dataframe
 

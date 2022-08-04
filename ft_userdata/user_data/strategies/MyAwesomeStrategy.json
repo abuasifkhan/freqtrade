@@ -1,0 +1,36 @@
+{
+  "strategy_name": "MyAwesomeStrategy",
+  "params": {
+    "trailing": {
+      "trailing_stop": false,
+      "trailing_stop_positive": null,
+      "trailing_stop_positive_offset": 0.0,
+      "trailing_only_offset_is_reached": false
+    },
+    "buy": {
+      "buy_adx": 33.5,
+      "buy_adx_enabled": false,
+      "buy_ema_long": 91,
+      "buy_ema_short": 25,
+      "buy_rsi": 37,
+      "buy_rsi_enabled": true,
+      "buy_trigger": "macd_cross_signal"
+    },
+    "sell": {
+      "sell_rsi": 74,
+      "short_rsi": 78
+    },
+    "protection": {},
+    "roi": {
+      "0": 0.34,
+      "110": 0.14500000000000002,
+      "144": 0.049,
+      "204": 0
+    },
+    "stoploss": {
+      "stoploss": -0.291
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2022-07-28 23:29:04.931950+00:00"
+}

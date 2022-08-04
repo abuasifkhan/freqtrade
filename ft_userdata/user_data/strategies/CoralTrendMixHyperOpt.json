@@ -1,0 +1,50 @@
+{
+  "strategy_name": "CoralTrendMixHyperOpt",
+  "params": {
+    "trailing": {
+      "trailing_stop": false,
+      "trailing_stop_positive": null,
+      "trailing_stop_positive_offset": 0.0,
+      "trailing_only_offset_is_reached": false
+    },
+    "buy": {
+      "atr_length": 5,
+      "atr_threshold": 0.641,
+      "buy_trigger": "medium_bfr_ema_cross",
+      "fast_sm_value": 14,
+      "macd_fast_period": 15,
+      "macd_signal": 10,
+      "macd_slow_period": 50,
+      "medium_cd_value": 0.4,
+      "medium_sm_value": 50,
+      "pmax_length": 20,
+      "pmax_multiplier": 4,
+      "pmax_period": 5,
+      "sar_accelaretion": 0.08,
+      "sar_maximum": 0.1,
+      "shouldIgnoreRoi": true,
+      "shouldUseStopLoss": true,
+      "use_atrP_as_guard": false,
+      "use_fast_bfr_as_guard": false,
+      "use_macd_as_guard": true,
+      "use_medium_bfr_as_guard": false,
+      "use_pmax_as_guard": true,
+      "use_sar_as_guard": false
+    },
+    "sell": {
+      "sell_trigger": "macd_crossover"
+    },
+    "protection": {},
+    "roi": {
+      "0": 0.329,
+      "117": 0.06,
+      "251": 0.022,
+      "600": 0
+    },
+    "stoploss": {
+      "stoploss": -0.277
+    }
+  },
+  "ft_stratparam_v": 1,
+  "export_time": "2022-08-04 20:19:30.544720+00:00"
+}
