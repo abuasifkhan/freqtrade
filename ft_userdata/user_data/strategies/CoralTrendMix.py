@@ -47,22 +47,22 @@ class CoralTrendMix(IStrategy):
     # This attribute will be overridden if the config file contains "minimal_roi".
     # ROI table:
     minimal_roi = {
-        "0": 0.294,
-        "37": 0.058,
-        "133": 0.028,
-        "493": 0
+        "0": 0.224,
+        "26": 0.061,
+        "75": 0.023,
+        "180": 0
     }
 
     atr_parameters = {
-        "length": 16,
-        "threshold": 0.989
+        "length": 13,
+        "threshold": 0.428
     }
 
     # MY INDICATORS
     # SAR parameters
     sar_parameters = {
         "acceleration": 0.04,
-        "maximum": 0.2,
+        "maximum": 0.01,
         "afstep": 0.03,
         "aflimit": 0.03,
         "epstep": 0.03,
@@ -86,9 +86,9 @@ class CoralTrendMix(IStrategy):
     }
 
     pmax_parameters = {
-        "period": 15, 
-        "multiplier": 4, 
-        "length": 15,
+        "period": 50, 
+        "multiplier": 15, 
+        "length": 50,
         "MAtype": 1
     }
 
@@ -103,7 +103,7 @@ class CoralTrendMix(IStrategy):
     # Optimal stoploss designed for the strategy.
     # This attribute will be overridden if the config file contains "stoploss".
     # Stoploss:
-    stoploss = -0.171
+    stoploss = -0.244
 
     # Trailing stoploss
     trailing_stop = False
@@ -155,7 +155,7 @@ class CoralTrendMix(IStrategy):
         }
     }
 
-    use_custom_stoploss = True
+    use_custom_stoploss = False
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
@@ -187,24 +187,24 @@ class CoralTrendMix(IStrategy):
 
     def is_uptrend(self, dataframe) -> bool:
         # return (dataframe['coral_medium'] < dataframe['ema3']) #& (dataframe['coral_fast'] < dataframe['ema3']) #&  (dataframe['PMAX'] == 'up')
-        return (dataframe['atrP'] > self.atr_parameters['threshold']) & (dataframe['coral_medium'] < dataframe['ema3']) &  (dataframe['pmax'] == 'up')
+        return (dataframe['pmax'] == 'up') & (dataframe['coral_medium'] < dataframe['ema3'])
 
     # def should_long(dataframe) -> bool:
     #     return is_uptrend(dataframe) & qtpylib.crossed_above(dataframe['ema3'], dataframe['coral_medium'])
 
     def should_long(self, dataframe) -> bool:
-        return (self.is_uptrend(dataframe)) & (qtpylib.crossed_above(dataframe['ema3'], dataframe['coral_medium']))
+        return (self.is_uptrend(dataframe)) & self.green_from_red(dataframe['coral_medium'])
 
     # def is_downtrend(dataframe) -> bool:
     #     return is_red(dataframe['coral_fast'])
 
     def is_downtrend(self, dataframe) -> bool:
         # return (dataframe['coral_medium'] > dataframe['low']) #(dataframe['PMAX'] == 'down') ##& (dataframe['coral_fast'] > dataframe['ema3']) #& 
-        return (dataframe['atrP'] < self.atr_parameters['threshold']) & (dataframe['coral_medium'] > dataframe['ema3']) & (dataframe['pmax'] == 'down')
+        return (dataframe['pmax'] == 'down') & (dataframe['coral_medium'] > dataframe['ema3'])
 
     def should_short(self, dataframe) -> bool:
         # return (self.is_downtrend(dataframe)) & (qtpylib.crossed_below(dataframe['ema3'], dataframe['coral_medium']))
-        return (self.is_downtrend(dataframe)) & (qtpylib.crossed_below(dataframe['ema3'], dataframe['coral_medium']))
+        return (self.is_downtrend(dataframe)) & (self.red_from_green(dataframe['coral_medium']))
 
     # def should_short(dataframe) -> bool:
     #     return is_downtrend(dataframe) & qtpylib.crossed_below(dataframe['ema3'], dataframe['coral_medium'])
@@ -329,5 +329,17 @@ class CoralTrendMix(IStrategy):
         :param metadata: Additional information, like the currently traded pair
         :return: DataFrame with exit columns populated
         """
+        # Fast bfr color change
+        dataframe.loc[
+            (
+                self.red_from_green(dataframe['coral_fast'])
+            ),
+            'exit_long'] = 1
+        
+        dataframe.loc[
+            (
+                self.green_from_red(dataframe['coral_fast'])
+            ),
+            'exit_short'] = 1
 
         return dataframe
