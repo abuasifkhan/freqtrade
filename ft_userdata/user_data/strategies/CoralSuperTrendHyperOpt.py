@@ -604,7 +604,7 @@ class CoralSuperTrendHyperOpt(IStrategy):
 
         print ('Parabolic SAR Loading')
         for accelaretion in self.sell_sar_accelaretion.range:
-            for maximum in self.buy_sar_maximum.range:
+            for maximum in self.sell_sar_maximum.range:
                 afstep = 0.03
                 aflimit = 0.03
                 epstep = 0.03
