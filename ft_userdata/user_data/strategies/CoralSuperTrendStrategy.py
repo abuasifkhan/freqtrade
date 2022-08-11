@@ -21,7 +21,7 @@ import freqtrade.vendor.qtpylib.indicators as qtpylib
 
 
 # This class is a sample. Feel free to customize it.
-class CoralSuperTrendHyperOpt(IStrategy):
+class CoralSuperTrendStrategy(IStrategy):
     """
     This is a sample strategy to inspire you.
     More information in https://www.freqtrade.io/en/latest/strategy-customization/
@@ -45,26 +45,63 @@ class CoralSuperTrendHyperOpt(IStrategy):
     # Can this strategy go short?
     can_short: bool = True
 
-    # Minimal ROI designed for the strategy.
-    # This attribute will be overridden if the config file contains "minimal_roi".
-    # ROI table:
-    minimal_roi = {
-        "0": 0.224,
-        "26": 0.061,
-        "75": 0.023,
-        "180": 0
+    # Buy hyperspace params:
+    buy_params = {
+        "buy_m1": 18,
+        "buy_p1": 30,
+        "buy_pmax_length": 5,
+        "buy_pmax_multiplier": 15,
+        "buy_pmax_period": 10,
+        "buy_sar_accelaretion": 0.002,
+        "buy_sar_maximum": 0.0001,
+        "buy_sm": 21,
+        "buy_trigger": "coral_color_change",
+        "buy_use_coral_as_guard": False,
+        "buy_use_pmax_as_guard": False,
+        "buy_use_sar_as_guard": False,
+        "buy_use_super_trend_as_guard": True,
+        "current_profit": 0.09,
+        "maximum_stoploss": 0.15,
+        "minimum_stoploss": 0.2,
+        "shouldIgnoreRoi": True,
+        "shouldUseStopLoss": False,
+        "should_exit_profit_only": True,
+        "should_use_exit_signal": False,
     }
 
-    # Optimal stoploss designed for the strategy.
-    # This attribute will be overridden if the config file contains "stoploss".
-    # Stoploss:
-    stoploss = -0.244
+    # Sell hyperspace params:
+    sell_params = {
+        "sell_m1": 21,
+        "sell_p1": 30,
+        "sell_pmax_length": 30,
+        "sell_pmax_multiplier": 10,
+        "sell_pmax_period": 50,
+        "sell_sar_accelaretion": 0.0002,
+        "sell_sar_maximum": 0.1,
+        "sell_sm": 7,
+        "sell_trigger": "supertrend",
+        "sell_use_coral_as_guard": True,
+        "sell_use_pmax_as_guard": False,
+        "sell_use_sar_as_guard": True,
+        "sell_use_super_trend_as_guard": True,
+    }
 
-    # Trailing stoploss
-    trailing_stop = False
-    # trailing_only_offset_is_reached = False
-    # trailing_stop_positive = 0.01
-    # trailing_stop_positive_offset = 0.0  # Disabled / not configured
+    # ROI table:
+    minimal_roi = {
+        "0": 0.085,
+        "40": 0.074,
+        "93": 0.027,
+        "174": 0
+    }
+
+    # Stoploss:
+    stoploss = -0.032
+
+    # Trailing stop:
+    trailing_stop = False  # value loaded from strategy
+    trailing_stop_positive = None  # value loaded from strategy
+    trailing_stop_positive_offset = 0.0  # value loaded from strategy
+    trailing_only_offset_is_reached = False  # value loaded from strategy
 
     # Optimal timeframe for the strategy.
     timeframe = '15m'
@@ -72,34 +109,6 @@ class CoralSuperTrendHyperOpt(IStrategy):
     # Run "populate_indicators()" only for new candle.
     process_only_new_candles = False
 
-    # MY INDICATORS
-    # SAR parameters
-    sar_parameters = {
-        "acceleration": 0.08,
-        "maximum": 0.2,
-        "afstep": 0.03,
-        "aflimit": 0.03,
-        "epstep": 0.03,
-        "eplimit": 0.3,
-    }
-
-    # Coral Parameters
-    fast_coral_trend_parameters = {
-        "fast_sm": 21,
-        "fast_cd": 0.4
-    }
-
-    coral_trend_parameters = {
-        "sm": 50,
-        "cd": 0.4
-    }
-
-    pmax_parameters = {
-        "period": 18, 
-        "multiplier": 4, 
-        "length": 21,
-        "MAtype": 1
-    }
     # END OF MY INDICATORS
 
     # Optional order type mapping.
@@ -114,18 +123,6 @@ class CoralSuperTrendHyperOpt(IStrategy):
     order_time_in_force = {
         'entry': 'gtc',
         'exit': 'gtc'
-    }
-
-    # Buy hyperspace params:
-    buy_params = {
-        "buy_m1": 4,
-        "buy_p1": 8
-    }
-
-    # Sell hyperspace params:
-    sell_params = {
-        "sell_m1": 1,
-        "sell_p1": 16
     }
 
     plot_config = {
@@ -144,86 +141,82 @@ class CoralSuperTrendHyperOpt(IStrategy):
         }
     }
 
-    shouldIgnoreRoi = BooleanParameter(default=False, space='buy')
-    shouldUseStopLoss = BooleanParameter(default=False, space='buy')
-
     # --------------------------------
-    buy_use_coral_as_guard = BooleanParameter(default=True, space='buy')
-    buy_sm =  CategoricalParameter([14, 21, 50, 100, 200], default=coral_trend_parameters['sm'], space='buy')
-    buy_cd = coral_trend_parameters['cd']
+    buy_use_coral_as_guard = True
+    buy_sm =  buy_params['buy_sm']
+    buy_cd = 0.4
     buy_coral_index_name = ''
 
-    sell_use_coral_as_guard = BooleanParameter(default=True, space='sell')
-    sell_sm =  CategoricalParameter([7, 14, 21, 50], default=coral_trend_parameters['sm'], space='sell')
-    sell_cd = coral_trend_parameters['cd']
+    sell_use_coral_as_guard = True
+    sell_sm =  sell_params['sell_sm']
+    sell_cd = 0.4
     sell_coral_index_name = ''
     # --------------------------------
 
     # --------------------------------
-    buy_use_pmax_as_guard = BooleanParameter(default=True, space='buy')
-    buy_pmax_period = CategoricalParameter([5, 10, 15, 20, 30, 40, 50], default=pmax_parameters['period'], space='buy')
-    buy_pmax_multiplier = CategoricalParameter([4, 7, 10, 15], default=pmax_parameters['multiplier'], space='buy')
-    buy_pmax_length = CategoricalParameter([5, 15, 20, 30, 40, 50, 60], default=pmax_parameters['length'], space='buy')
+    buy_use_pmax_as_guard = True
+    buy_pmax_period = buy_params['buy_pmax_period']
+    buy_pmax_multiplier = buy_params['buy_pmax_multiplier']
+    buy_pmax_length = buy_params['buy_pmax_length']
     buy_pmax_index_name = ''
 
-    sell_use_pmax_as_guard = BooleanParameter(default=True, space='sell')
-    sell_pmax_period = CategoricalParameter([5, 10, 15, 20, 30, 40, 50], default=pmax_parameters['period'], space='sell')
-    sell_pmax_multiplier = CategoricalParameter([4, 7, 10, 15], default=pmax_parameters['multiplier'], space='sell')
-    sell_pmax_length = CategoricalParameter([5, 15, 20, 30, 40, 50, 60], default=pmax_parameters['length'], space='sell')
+    sell_use_pmax_as_guard = True
+    sell_pmax_period = sell_params['sell_pmax_period']
+    sell_pmax_multiplier = sell_params['sell_pmax_multiplier']
+    sell_pmax_length = sell_params['sell_pmax_length']
     sell_pmax_index_name = ''
     # --------------------------------
 
     # --------------------------------
-    buy_use_sar_as_guard = BooleanParameter(default=True, space='buy')
-    buy_sar_accelaretion = CategoricalParameter([0.002, 0.0002, 0.02, 0.2], default=sar_parameters['acceleration'], space='buy')
-    buy_sar_maximum = CategoricalParameter([0.1, 0.01, 0.001, 0.0001], default=sar_parameters['maximum'], space='buy')
+    buy_use_sar_as_guard = False
+    buy_sar_accelaretion = buy_params['buy_sar_accelaretion']
+    buy_sar_maximum = buy_params['buy_sar_maximum']
     buy_sar_index_name = ''
 
-    sell_use_sar_as_guard = BooleanParameter(default=True, space='sell')
-    sell_sar_accelaretion = CategoricalParameter([0.002, 0.0002, 0.02, 0.2], default=sar_parameters['acceleration'], space='sell')
-    sell_sar_maximum = CategoricalParameter([0.1, 0.01, 0.001, 0.0001], default=sar_parameters['maximum'], space='sell')
+    sell_use_sar_as_guard = True
+    sell_sar_accelaretion = sell_params['sell_sar_accelaretion']
+    sell_sar_maximum = sell_params['sell_sar_maximum']
     sell_sar_index_name = ''
     # --------------------------------
 
     # --------------------------------
-    buy_use_super_trend_as_guard = BooleanParameter(default=True, space='buy')
-    buy_m1 = CategoricalParameter([1, 3, 5, 7, 10, 12, 14, 18, 21, 30], default=buy_params['buy_m1'], space='buy')
-    buy_p1 = CategoricalParameter([7, 10, 12, 14, 18, 21, 30], default=buy_params['buy_p1'], space='buy')
+    buy_use_super_trend_as_guard = True
+    buy_m1 = buy_params['buy_m1']
+    buy_p1 = buy_params['buy_p1']
     buy_super_trend_index_name = ''
 
-    sell_use_super_trend_as_guard = BooleanParameter(default=True, space='sell')
-    sell_m1 = CategoricalParameter([1, 3, 5, 7, 10, 12, 14, 18, 21, 30], default=sell_params['sell_m1'], space='sell')
-    sell_p1 = CategoricalParameter([7, 10, 12, 14, 18, 21, 30], default=sell_params['sell_p1'], space='sell')
+    sell_use_super_trend_as_guard = False
+    sell_m1 = sell_params['sell_m1']
+    sell_p1 = sell_params['sell_p1']
     sell_super_trend_index_name = ''
     # --------------------------------
 
-    buy_trigger = CategoricalParameter(["coral_ema_cross", "coral_color_change", "sar_ema_cross", "supertrend", "pmax_cross"], default="coral_ema_cross", space="buy")
-    sell_trigger = CategoricalParameter(["coral_ema_cross", "coral_color_change", "sar_ema_cross", "supertrend", "pmax_cross"], default="coral_ema_cross", space="sell")
+    # buy_trigger = CategoricalParameter(["coral_ema_cross", "coral_color_change", "sar_ema_cross", "supertrend", "pmax_cross"], default="coral_ema_cross", space="buy")
+    # sell_trigger = CategoricalParameter(["coral_ema_cross", "coral_color_change", "sar_ema_cross", "supertrend", "pmax_cross"], default="coral_ema_cross", space="sell")
+    buy_trigger = buy_params['buy_trigger']
+    sell_trigger = sell_params['sell_trigger']
 
     # These values can be overridden in the config.
-    should_use_exit_signal = BooleanParameter(default=False, space='buy')
-    should_exit_profit_only = BooleanParameter(default=False, space='buy')
-    use_exit_signal = should_use_exit_signal.value
-    exit_profit_only = should_exit_profit_only.value
-    ignore_roi_if_entry_signal = shouldIgnoreRoi.value
+    use_exit_signal = buy_params['should_use_exit_signal']
+    exit_profit_only = buy_params['should_exit_profit_only']
+    ignore_roi_if_entry_signal = buy_params['shouldIgnoreRoi']
 
     # Number of candles the strategy requires before producing valid signals
     startup_candle_count: int = 200
 
-    use_custom_stoploss = shouldUseStopLoss.value
-    current_profit = CategoricalParameter([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=0.01, space='buy')
-    minimum_stoploss = CategoricalParameter([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.05, space='buy')
-    maximum_stoploss = CategoricalParameter([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.3, space='buy')
+    use_custom_stoploss = buy_params['shouldUseStopLoss']
+
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
-        if current_profit < self.current_profit.value:
+        if current_profit < self.buy_params['current_profit']:
             return -1 # return a value bigger than the inital stoploss to keep using the inital stoploss
 
         # After reaching the desired offset, allow the stoploss to trail by half the profit
         desired_stoploss = current_profit / 2 
 
         # Use a minimum of 1.5% and a maximum of 3%
-        return max(min(desired_stoploss, self.minimum_stoploss), self.maximum_stoploss)
+        return max(min(desired_stoploss, self.buy_params['minimum_stoploss']), self.buy_params['maximum_stoploss'])
+
 
     def informative_pairs(self):
         """
@@ -330,14 +323,14 @@ class CoralSuperTrendHyperOpt(IStrategy):
         return dataframe
     
     def init_index_names(self):
-        self.buy_sar_index_name = f'sar_{self.buy_sar_accelaretion.value}_{self.buy_sar_maximum.value}'
-        self.sell_sar_index_name = f'sar_{self.sell_sar_accelaretion.value}_{self.sell_sar_maximum.value}'
-        self.buy_pmax_index_name = f'pmax_{self.buy_pmax_period.value}_{self.buy_pmax_multiplier.value}_{self.buy_pmax_length.value}_{self.pmax_parameters["MAtype"]}'
-        self.sell_pmax_index_name = f'pmax_{self.sell_pmax_period.value}_{self.sell_pmax_multiplier.value}_{self.sell_pmax_length.value}_{self.pmax_parameters["MAtype"]}'
-        self.buy_coral_index_name = f'coral_{self.buy_sm.value}_{self.buy_cd}'
-        self.sell_coral_index_name = f'coral_{self.sell_sm.value}_{self.sell_cd}'
-        self.buy_super_trend_index_name = f'supertrend_1_buy_{self.buy_m1.value}_{self.buy_p1.value}'
-        self.sell_super_trend_index_name = f'supertrend_1_sell_{self.sell_m1.value}_{self.sell_p1.value}'
+        self.buy_sar_index_name = f'sar_{self.buy_sar_accelaretion}_{self.buy_sar_maximum}'
+        self.sell_sar_index_name = f'sar_{self.sell_sar_accelaretion}_{self.sell_sar_maximum}'
+        self.buy_pmax_index_name = f'pmax_{self.buy_pmax_period}_{self.buy_pmax_multiplier}_{self.buy_pmax_length}_{1}'
+        self.sell_pmax_index_name = f'pmax_{self.sell_pmax_period}_{self.sell_pmax_multiplier}_{self.sell_pmax_length}_{1}'
+        self.buy_coral_index_name = f'coral_{self.buy_sm}_{self.buy_cd}'
+        self.sell_coral_index_name = f'coral_{self.sell_sm}_{self.sell_cd}'
+        self.buy_super_trend_index_name = f'supertrend_1_buy_{self.buy_m1}_{self.buy_p1}'
+        self.sell_super_trend_index_name = f'supertrend_1_sell_{self.sell_m1}_{self.sell_p1}'
 
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -364,32 +357,32 @@ class CoralSuperTrendHyperOpt(IStrategy):
     def populate_long_entry_guards(self, dataframe: DataFrame) -> DataFrame:
         long_condition = []
 
-        if self.buy_use_sar_as_guard.value == True:
-            long_condition.append(dataframe[f'sar_{self.buy_sar_accelaretion.value}_{self.buy_sar_maximum.value}'] < dataframe['close'])
+        if self.buy_use_sar_as_guard == True:
+            long_condition.append(dataframe[f'sar_{self.buy_sar_accelaretion}_{self.buy_sar_maximum}'] < dataframe['close'])
 
-        if self.buy_use_pmax_as_guard.value == True:
+        if self.buy_use_pmax_as_guard == True:
             long_condition.append(dataframe[self.buy_pmax_index_name] == 'up')
 
-        if self.buy_use_coral_as_guard.value == True:
+        if self.buy_use_coral_as_guard == True:
             long_condition.append(dataframe[self.buy_coral_index_name] < dataframe['ema3'])
         
-        if self.buy_use_super_trend_as_guard.value == True:
+        if self.buy_use_super_trend_as_guard == True:
             long_condition.append(dataframe[self.buy_super_trend_index_name] == 'up')
         
         return long_condition
     
     def populate_long_exit_guards(self, dataframe: DataFrame) -> DataFrame:
         short_exit = []
-        if self.sell_use_sar_as_guard.value == True:
-            short_exit.append(dataframe[f'sar_{self.sell_sar_accelaretion.value}_{self.sell_sar_maximum.value}'] > dataframe['close'])
+        if self.sell_use_sar_as_guard == True:
+            short_exit.append(dataframe[f'sar_{self.sell_sar_accelaretion}_{self.sell_sar_maximum}'] > dataframe['close'])
         
-        if self.sell_use_pmax_as_guard.value == True:
+        if self.sell_use_pmax_as_guard == True:
             short_exit.append(dataframe[self.sell_pmax_index_name] == 'down')
         
-        if self.sell_use_coral_as_guard.value == True:
+        if self.sell_use_coral_as_guard == True:
             short_exit.append(dataframe[self.sell_coral_index_name] > dataframe['ema3'])
         
-        if self.sell_use_super_trend_as_guard.value == True:
+        if self.sell_use_super_trend_as_guard == True:
             short_exit.append(dataframe[self.sell_super_trend_index_name] == 'down')
         
         return short_exit
@@ -398,13 +391,13 @@ class CoralSuperTrendHyperOpt(IStrategy):
         short_condition = []
 
         # GUARDS AND TRENDS
-        if self.buy_use_sar_as_guard.value == True:
+        if self.buy_use_sar_as_guard == True:
             short_condition.append(dataframe[self.buy_sar_index_name] > dataframe['close'])
 
-        if self.buy_use_pmax_as_guard.value == True:
+        if self.buy_use_pmax_as_guard == True:
             short_condition.append(dataframe[self.buy_pmax_index_name] == 'down')
 
-        if self.buy_use_coral_as_guard.value == True:
+        if self.buy_use_coral_as_guard == True:
             short_condition.append(dataframe[self.buy_coral_index_name] > dataframe['ema3'])
         
         if self.sell_use_super_trend_as_guard == True:
@@ -416,34 +409,34 @@ class CoralSuperTrendHyperOpt(IStrategy):
         short_exit = []
 
         # GUARDS AND TRENDS
-        if self.sell_use_sar_as_guard.value == True:
+        if self.sell_use_sar_as_guard == True:
             short_exit.append(dataframe[self.sell_sar_index_name] < dataframe['close'])
         
-        if self.sell_use_pmax_as_guard.value == True:
+        if self.sell_use_pmax_as_guard == True:
             short_exit.append(dataframe[self.sell_pmax_index_name] == 'up')
         
-        if self.sell_use_coral_as_guard.value == True:
+        if self.sell_use_coral_as_guard == True:
             short_exit.append(dataframe[self.sell_coral_index_name] < dataframe['ema3'])
         
-        if self.sell_use_super_trend_as_guard.value == True:
+        if self.sell_use_super_trend_as_guard == True:
             short_exit.append(dataframe[self.sell_super_trend_index_name] == 'up')
         
         return short_exit
 
     def populate_long_trigger(self, dataframe: DataFrame, long_condition):
-        if self.buy_trigger.value == "sar_ema_cross":
+        if self.buy_trigger == "sar_ema_cross":
             long_condition.append(
                 qtpylib.crossed_above(dataframe['ema3'], dataframe[self.buy_sar_index_name])
             )
-        elif self.buy_trigger.value == "coral_ema_cross":
+        elif self.buy_trigger == "coral_ema_cross":
             long_condition.append(
                 qtpylib.crossed_above(dataframe['ema3'], dataframe[self.buy_coral_index_name])
             )
-        elif self.buy_trigger.value == "coral_color_change":
+        elif self.buy_trigger == "coral_color_change":
             long_condition.append(
                 self.green_from_red(dataframe[self.buy_coral_index_name])
             )
-        elif self.buy_trigger.value == "supertrend":
+        elif self.buy_trigger == "supertrend":
             long_condition.append(
                 (dataframe[self.buy_super_trend_index_name] == 'up') &
                 (dataframe[self.buy_super_trend_index_name].shift(1) == 'down')
@@ -452,19 +445,19 @@ class CoralSuperTrendHyperOpt(IStrategy):
         return long_condition
     
     def populate_long_exit_trigger(self, dataframe: DataFrame, long_exit):
-        if self.sell_trigger.value == "sar_ema_cross":
+        if self.sell_trigger == "sar_ema_cross":
             long_exit.append(
                 qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sell_sar_index_name])
             )
-        elif self.sell_trigger.value == "coral_ema_cross":
+        elif self.sell_trigger == "coral_ema_cross":
             long_exit.append(
                 qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sell_coral_index_name])
             )
-        elif self.sell_trigger.value == "coral_color_change":
+        elif self.sell_trigger == "coral_color_change":
             long_exit.append(
                 self.red_from_green(dataframe[self.sell_coral_index_name])
             )
-        elif self.sell_trigger.value == "supertrend":
+        elif self.sell_trigger == "supertrend":
             long_exit.append(
                 (dataframe[self.sell_super_trend_index_name] == 'down') &
                 (dataframe[self.sell_super_trend_index_name].shift(1) == 'up')
@@ -473,19 +466,19 @@ class CoralSuperTrendHyperOpt(IStrategy):
         return long_exit
     
     def populate_short_trigger(self, dataframe: DataFrame, short_condition):
-        if self.buy_trigger.value == "sar_ema_cross":
+        if self.buy_trigger == "sar_ema_cross":
             short_condition.append(
                 qtpylib.crossed_below(dataframe['ema3'], dataframe[self.buy_sar_index_name])
             )
-        elif self.buy_trigger.value == "coral_ema_cross":
+        elif self.buy_trigger == "coral_ema_cross":
             short_condition.append(
                 qtpylib.crossed_below(dataframe['ema3'], dataframe[self.buy_coral_index_name])
             )
-        elif self.buy_trigger.value == "coral_color_change":
+        elif self.buy_trigger == "coral_color_change":
             short_condition.append(
                 self.red_from_green(dataframe[self.buy_coral_index_name])
             )
-        elif self.buy_trigger.value == "supertrend":
+        elif self.buy_trigger == "supertrend":
             short_condition.append(
                 (dataframe[self.buy_super_trend_index_name] == 'down') &
                 (dataframe[self.buy_super_trend_index_name].shift(1) == 'up')
@@ -494,19 +487,19 @@ class CoralSuperTrendHyperOpt(IStrategy):
         return short_condition
     
     def populate_short_exit_trigger(self, dataframe: DataFrame, exit_short):
-        if self.sell_trigger.value == "sar_ema_cross":
+        if self.sell_trigger == "sar_ema_cross":
             exit_short.append(
                 qtpylib.crossed_above(dataframe['ema3'], dataframe[self.sell_sar_index_name])
             )
-        elif self.sell_trigger.value == "coral_ema_cross":
+        elif self.sell_trigger == "coral_ema_cross":
             exit_short.append(
                 qtpylib.crossed_above(dataframe['ema3'], dataframe[self.sell_coral_index_name])
             )
-        elif self.sell_trigger.value == "coral_color_change":
+        elif self.sell_trigger == "coral_color_change":
             exit_short.append(
                 self.green_from_red(dataframe[self.sell_coral_index_name])
             )
-        elif self.sell_trigger.value == "supertrend":
+        elif self.sell_trigger == "supertrend":
             exit_short.append(
                 (dataframe[self.sell_super_trend_index_name] == 'up') &
                 (dataframe[self.sell_super_trend_index_name].shift(1) == 'down')
@@ -515,17 +508,13 @@ class CoralSuperTrendHyperOpt(IStrategy):
         return exit_short
     
     def populate_supertrend(self, dataframe: DataFrame) -> DataFrame:
-        for multiplier in self.buy_m1.range:
-            for period in self.buy_p1.range:
-                dataframe[f"supertrend_1_buy_{multiplier}_{period}"] = self.supertrend(
-                    dataframe, multiplier, period
-                )["STX"]
+        dataframe[f"supertrend_1_buy_{self.buy_m1}_{self.buy_p1}"] = self.supertrend(
+            dataframe, self.buy_m1, self.buy_p1
+        )["STX"]
 
-        for multiplier in self.sell_m1.range:
-            for period in self.sell_p1.range:
-                dataframe[f"supertrend_1_sell_{multiplier}_{period}"] = self.supertrend(
-                    dataframe, multiplier, period
-                )["STX"]
+        dataframe[f"supertrend_1_sell_{self.sell_m1}_{self.sell_p1}"] = self.supertrend(
+            dataframe, self.sell_m1, self.sell_p1
+        )["STX"]
 
         return dataframe
     
@@ -591,34 +580,31 @@ class CoralSuperTrendHyperOpt(IStrategy):
     
     def populate_parabolic_sar(self, dataframe: DataFrame) -> DataFrame:
         print ('Parabolic SAR Loading')
-        for accelaretion in self.buy_sar_accelaretion.range:
-            for maximum in self.buy_sar_maximum.range:
-                afstep = 0.03
-                aflimit = 0.03
-                epstep = 0.03
-                eplimit = 0.3
-                name = f'sar_{accelaretion}_{maximum}'
-                print("Printing: " + name)
-                temp = ta.SAR(dataframe['high'], dataframe['low'], acceleration=accelaretion, maximum=maximum,
-                                        afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
-                dataframe[name] = temp
-                print('Done')
+        afstep = 0.03
+        aflimit = 0.03
+        epstep = 0.03
+        eplimit = 0.3
+        name = f'sar_{self.buy_sar_accelaretion}_{self.buy_sar_maximum}'
+        print("Printing: " + name)
+        temp = ta.SAR(dataframe['high'], dataframe['low'], acceleration=self.buy_sar_accelaretion, maximum=self.buy_sar_maximum,
+                                afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
+        dataframe[name] = temp
+        print('Done')
         
         print ('Parabolic SAR Loaded')
 
         print ('Parabolic SAR Loading')
-        for accelaretion in self.sell_sar_accelaretion.range:
-            for maximum in self.sell_sar_maximum.range:
-                afstep = 0.03
-                aflimit = 0.03
-                epstep = 0.03
-                eplimit = 0.3
-                name = f'sar_{accelaretion}_{maximum}'
-                print("Printing: " + name)
-                temp = ta.SAR(dataframe['high'], dataframe['low'], acceleration=accelaretion, maximum=maximum,
-                                        afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
-                dataframe[name] = temp
-                print('Done')
+
+        afstep = 0.03
+        aflimit = 0.03
+        epstep = 0.03
+        eplimit = 0.3
+        name = f'sar_{self.sell_sar_accelaretion}_{self.sell_sar_maximum}'
+        print("Printing: " + name)
+        temp = ta.SAR(dataframe['high'], dataframe['low'], acceleration=self.sell_sar_accelaretion, maximum=self.sell_sar_maximum,
+                                afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
+        dataframe[name] = temp
+        print('Done')
         
         print ('Parabolic SAR Loaded')
 
@@ -626,34 +612,24 @@ class CoralSuperTrendHyperOpt(IStrategy):
     
     def populate_profix_maximizer(self, dataframe: DataFrame) -> DataFrame:
         print ('Profit Maximizer Loading')
-        for period in self.buy_pmax_period.range:
-            for multiplier in self.buy_pmax_multiplier.range:
-                for length in self.buy_pmax_length.range:
-                    pmax_MAtype = self.pmax_parameters["MAtype"]
-                    dataframe = PMAX(dataframe, period=period, multiplier=multiplier, length=length, MAtype=pmax_MAtype)
+        pmax_MAtype = 1
+        dataframe = PMAX(dataframe, period=self.buy_pmax_period, multiplier=self.buy_pmax_multiplier, length=self.buy_pmax_length, MAtype=pmax_MAtype)
         print('Profit Maximizer Loaded')
 
         print ('Maximizer Loading')
-        for period in self.sell_pmax_period.range:
-            for multiplier in self.sell_pmax_multiplier.range:
-                for length in self.sell_pmax_length.range:
-                    pmax_MAtype = self.pmax_parameters["MAtype"]
-                    dataframe = PMAX(dataframe, period=period, multiplier=multiplier, length=length, MAtype=pmax_MAtype)
+        pmax_MAtype = 1
+        dataframe = PMAX(dataframe, period=self.sell_pmax_period, multiplier=self.sell_pmax_multiplier, length=self.sell_pmax_length, MAtype=pmax_MAtype)
         print('Short Maximizer Loaded')
 
         return dataframe
     
     def populate_coral_trend(self, dataframe: DataFrame) -> DataFrame:
-        for sm in self.buy_sm.range:
-            # for cd in self.cd.range:
-            print('Loading medium Coral Trend Indicator')
-            dataframe[f'coral_{sm}_{self.buy_cd}'] = coral_trend(dataframe, sm, self.buy_cd)
+        print('Loading medium Coral Trend Indicator')
+        dataframe[f'coral_{self.buy_sm}_{self.buy_cd}'] = coral_trend(dataframe, self.buy_sm, self.buy_cd)
         print ('Medium Coral Trend Indicator Loaded')
 
-        for sm in self.sell_sm.range:
-            # for cd in self.cd.range:
-            print('Loading medium Coral Trend Indicator')
-            dataframe[f'coral_{sm}_{self.sell_cd}'] = coral_trend(dataframe, sm, self.sell_cd)
+        print('Loading medium Coral Trend Indicator')
+        dataframe[f'coral_{self.sell_sm}_{self.sell_cd}'] = coral_trend(dataframe, self.sell_sm, self.sell_cd)
         print ('Medium Coral Trend Indicator Loaded')
 
         return dataframe
