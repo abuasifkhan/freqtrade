@@ -47,55 +47,60 @@ class CoralSuperTrendStrategy(IStrategy):
 
     # Buy hyperspace params:
     buy_params = {
-        "buy_m1": 18,
-        "buy_p1": 30,
-        "buy_pmax_length": 5,
+        "buy_coral_cd": 0.9,
+        "buy_coral_sm": 50,
+        "buy_fast_coral_cd": 0.9,
+        "buy_fast_coral_sm": 50,
+        "buy_m1": 30,
+        "buy_p1": 12,
+        "buy_pmax_length": 60,
         "buy_pmax_multiplier": 15,
-        "buy_pmax_period": 10,
-        "buy_sar_accelaretion": 0.002,
-        "buy_sar_maximum": 0.0001,
-        "buy_sm": 21,
+        "buy_pmax_period": 30,
+        "buy_sar_accelaretion": 0.2,
+        "buy_sar_maximum": 0.01,
         "buy_trigger": "coral_color_change",
         "buy_use_coral_as_guard": False,
+        "buy_use_fast_coral_as_guard": False,
         "buy_use_pmax_as_guard": False,
-        "buy_use_sar_as_guard": False,
+        "buy_use_sar_as_guard": True,
         "buy_use_super_trend_as_guard": True,
-        "current_profit": 0.09,
-        "maximum_stoploss": 0.15,
+        "current_profit": 0.02,
+        "maximum_stoploss": 0.4,
         "minimum_stoploss": 0.2,
         "shouldIgnoreRoi": True,
         "shouldUseStopLoss": False,
-        "should_exit_profit_only": True,
-        "should_use_exit_signal": False,
+        "should_exit_profit_only": False,
+        "should_use_exit_signal": True,
     }
 
     # Sell hyperspace params:
     sell_params = {
+        "sell_coral_cd": 0.4,
+        "sell_coral_sm": 21,
         "sell_m1": 21,
-        "sell_p1": 30,
-        "sell_pmax_length": 30,
-        "sell_pmax_multiplier": 10,
+        "sell_p1": 7,
+        "sell_pmax_length": 20,
+        "sell_pmax_multiplier": 4,
         "sell_pmax_period": 50,
-        "sell_sar_accelaretion": 0.0002,
-        "sell_sar_maximum": 0.1,
-        "sell_sm": 7,
+        "sell_sar_accelaretion": 0.02,
+        "sell_sar_maximum": 0.01,
         "sell_trigger": "supertrend",
         "sell_use_coral_as_guard": True,
         "sell_use_pmax_as_guard": False,
-        "sell_use_sar_as_guard": True,
-        "sell_use_super_trend_as_guard": True,
+        "sell_use_sar_as_guard": False,
+        "sell_use_super_trend_as_guard": False,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.085,
-        "40": 0.074,
-        "93": 0.027,
-        "174": 0
+        "0": 0.286,
+        "39": 0.064,
+        "210": 0.019,
+        "367": 0
     }
 
     # Stoploss:
-    stoploss = -0.032
+    stoploss = -0.114
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -143,13 +148,13 @@ class CoralSuperTrendStrategy(IStrategy):
 
     # --------------------------------
     buy_use_coral_as_guard = True
-    buy_sm =  buy_params['buy_sm']
-    buy_cd = 0.4
+    buy_coral_sm =  buy_params['buy_coral_sm']
+    buy_coral_cd = buy_params['buy_coral_cd']
     buy_coral_index_name = ''
 
     sell_use_coral_as_guard = True
-    sell_sm =  sell_params['sell_sm']
-    sell_cd = 0.4
+    sell_coral_sm =  sell_params['sell_coral_sm']
+    sell_coral_cd = sell_params['sell_coral_cd']
     sell_coral_index_name = ''
     # --------------------------------
 
@@ -327,8 +332,8 @@ class CoralSuperTrendStrategy(IStrategy):
         self.sell_sar_index_name = f'sar_{self.sell_sar_accelaretion}_{self.sell_sar_maximum}'
         self.buy_pmax_index_name = f'pmax_{self.buy_pmax_period}_{self.buy_pmax_multiplier}_{self.buy_pmax_length}_{1}'
         self.sell_pmax_index_name = f'pmax_{self.sell_pmax_period}_{self.sell_pmax_multiplier}_{self.sell_pmax_length}_{1}'
-        self.buy_coral_index_name = f'coral_{self.buy_sm}_{self.buy_cd}'
-        self.sell_coral_index_name = f'coral_{self.sell_sm}_{self.sell_cd}'
+        self.buy_coral_index_name = f'coral_{self.buy_coral_sm}_{self.buy_coral_cd}'
+        self.sell_coral_index_name = f'coral_{self.sell_coral_sm}_{self.sell_coral_cd}'
         self.buy_super_trend_index_name = f'supertrend_1_buy_{self.buy_m1}_{self.buy_p1}'
         self.sell_super_trend_index_name = f'supertrend_1_sell_{self.sell_m1}_{self.sell_p1}'
 
@@ -625,11 +630,11 @@ class CoralSuperTrendStrategy(IStrategy):
     
     def populate_coral_trend(self, dataframe: DataFrame) -> DataFrame:
         print('Loading medium Coral Trend Indicator')
-        dataframe[f'coral_{self.buy_sm}_{self.buy_cd}'] = coral_trend(dataframe, self.buy_sm, self.buy_cd)
+        dataframe[f'coral_{self.buy_coral_sm}_{self.buy_coral_cd}'] = coral_trend(dataframe, self.buy_coral_sm, self.buy_coral_cd)
         print ('Medium Coral Trend Indicator Loaded')
 
         print('Loading medium Coral Trend Indicator')
-        dataframe[f'coral_{self.sell_sm}_{self.sell_cd}'] = coral_trend(dataframe, self.sell_sm, self.sell_cd)
+        dataframe[f'coral_{self.sell_coral_sm}_{self.sell_coral_cd}'] = coral_trend(dataframe, self.sell_coral_sm, self.sell_coral_cd)
         print ('Medium Coral Trend Indicator Loaded')
 
         return dataframe
