@@ -51,11 +51,11 @@ class SSLChannelStrategy(IStrategy):
 
     # Buy hyperspace params:
     buy_params = {
-        "buy_large_ssl_length": 40,
-        "buy_small_ssl_length": 30,
-        "current_profit": 0.03,
-        "maximum_stoploss": 0.05,
-        "minimum_stoploss": 0.05,
+        "buy_large_ssl_length": 50,
+        "buy_small_ssl_length": 10,
+        "current_profit": 0.07,
+        "maximum_stoploss": 0.4,
+        "minimum_stoploss": 0.25,
         "shouldIgnoreRoi": True,
         "shouldUseStopLoss": True,
         "should_exit_profit_only": True,
@@ -64,19 +64,19 @@ class SSLChannelStrategy(IStrategy):
 
     # Sell hyperspace params:
     sell_params = {
-        "sell_ssl_length": 25,
+        "sell_ssl_length": 20,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.328,
-        "100": 0.08,
-        "215": 0.044,
-        "435": 0
+        "0": 0.117,
+        "48": 0.045,
+        "150": 0.018,
+        "251": 0
     }
 
     # Stoploss:
-    stoploss = -0.16
+    stoploss = -0.328
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -248,20 +248,15 @@ class SSLChannelStrategy(IStrategy):
     def populate_long_entry_guards(self, dataframe: DataFrame) -> DataFrame:
         long_condition = []
 
-        long_condition.append(dataframe[self.buy_small_ssl_channel_down_index_name] < dataframe[self.buy_small_ssl_channel_up_index_name])
+        long_condition.append(dataframe[self.buy_large_ssl_channel_down_index_name] < dataframe[self.buy_large_ssl_channel_up_index_name])
         
         return long_condition
-    
-    def populate_long_exit_guards(self, dataframe: DataFrame) -> DataFrame:
-        short_exit = []
-        
-        return short_exit
     
     def populate_short_entry_guards(self, dataframe: DataFrame) -> DataFrame:
         short_condition = []
 
         # GUARDS AND TRENDS
-        short_condition.append(dataframe[self.buy_small_ssl_channel_down_index_name] > dataframe[self.buy_small_ssl_channel_up_index_name])
+        short_condition.append(dataframe[self.buy_large_ssl_channel_down_index_name] > dataframe[self.buy_large_ssl_channel_up_index_name])
         
         return short_condition
     
@@ -269,30 +264,35 @@ class SSLChannelStrategy(IStrategy):
         short_exit = []
 
         # GUARDS AND TRENDS
+        short_exit.append(dataframe[self.sell_ssl_channel_up_index_name] > dataframe[self.sell_ssl_channel_down_index_name])
         
         return short_exit
+    
+    def populate_long_exit_guards(self, dataframe: DataFrame) -> DataFrame:
+        long_exit = []
+
+        # GUARDS AND TRENDS
+        long_exit.append(dataframe[self.sell_ssl_channel_up_index_name] < dataframe[self.sell_ssl_channel_down_index_name])
+        
+        return long_exit
 
     def populate_long_trigger(self, dataframe: DataFrame, long_condition):
-        if self.buy_trigger == 'ssl_channel_buy':
-            long_condition.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_above(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # if self.buy_trigger == 'ssl_channel_buy':
+        long_condition.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name))
 
         return long_condition
     
     def populate_long_exit_trigger(self, dataframe: DataFrame, long_exit):
-        long_exit.append(self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_below(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # long_exit.append(self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
         return long_exit
     
     def populate_short_trigger(self, dataframe: DataFrame, short_condition):
-        if self.buy_trigger == 'ssl_channel_buy':
-            short_condition.append(self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_below(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # if self.buy_trigger == 'ssl_channel_buy':
+        short_condition.append(self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name))
         return short_condition
     
     def populate_short_exit_trigger(self, dataframe: DataFrame, exit_short):
-        exit_short.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_above(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # exit_short.append(self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
         
         return exit_short
     

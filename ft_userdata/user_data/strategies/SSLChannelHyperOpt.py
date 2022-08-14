@@ -256,20 +256,15 @@ class SSLChannelHyperOpt(IStrategy):
     def populate_long_entry_guards(self, dataframe: DataFrame) -> DataFrame:
         long_condition = []
 
-        long_condition.append(dataframe[self.buy_small_ssl_channel_down_index_name] < dataframe[self.buy_small_ssl_channel_up_index_name])
+        long_condition.append(dataframe[self.buy_large_ssl_channel_down_index_name] < dataframe[self.buy_large_ssl_channel_up_index_name])
         
         return long_condition
-    
-    def populate_long_exit_guards(self, dataframe: DataFrame) -> DataFrame:
-        short_exit = []
-        
-        return short_exit
     
     def populate_short_entry_guards(self, dataframe: DataFrame) -> DataFrame:
         short_condition = []
 
         # GUARDS AND TRENDS
-        short_condition.append(dataframe[self.buy_small_ssl_channel_down_index_name] > dataframe[self.buy_small_ssl_channel_up_index_name])
+        short_condition.append(dataframe[self.buy_large_ssl_channel_down_index_name] > dataframe[self.buy_large_ssl_channel_up_index_name])
         
         return short_condition
     
@@ -277,30 +272,35 @@ class SSLChannelHyperOpt(IStrategy):
         short_exit = []
 
         # GUARDS AND TRENDS
+        short_exit.append(dataframe[self.sell_ssl_channel_up_index_name] > dataframe[self.sell_ssl_channel_down_index_name])
         
         return short_exit
+    
+    def populate_long_exit_guards(self, dataframe: DataFrame) -> DataFrame:
+        long_exit = []
+
+        # GUARDS AND TRENDS
+        long_exit.append(dataframe[self.sell_ssl_channel_up_index_name] < dataframe[self.sell_ssl_channel_down_index_name])
+        
+        return long_exit
 
     def populate_long_trigger(self, dataframe: DataFrame, long_condition):
-        if self.buy_trigger == 'ssl_channel_buy':
-            long_condition.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_above(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # if self.buy_trigger == 'ssl_channel_buy':
+        long_condition.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name))
 
         return long_condition
     
     def populate_long_exit_trigger(self, dataframe: DataFrame, long_exit):
-        long_exit.append(self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_below(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # long_exit.append(self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
         return long_exit
     
     def populate_short_trigger(self, dataframe: DataFrame, short_condition):
-        if self.buy_trigger == 'ssl_channel_buy':
-            short_condition.append(self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_below(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # if self.buy_trigger == 'ssl_channel_buy':
+        short_condition.append(self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name))
         return short_condition
     
     def populate_short_exit_trigger(self, dataframe: DataFrame, exit_short):
-        exit_short.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name) |
-                                   self.ssl_cross_above(dataframe, self.buy_large_ssl_channel_down_index_name, self.buy_large_ssl_channel_up_index_name))
+        # exit_short.append(self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
         
         return exit_short
     
