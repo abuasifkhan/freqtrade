@@ -16,7 +16,7 @@ import datetime
 from technical.indicators.indicators import *
 
 from freqtrade.strategy import (BooleanParameter, CategoricalParameter, DecimalParameter,
-                                IStrategy, IntParameter)
+                                IStrategy, IntParameter, stoploss_from_open)
 
 # --------------------------------
 # Add your lib to import here
@@ -148,6 +148,7 @@ class SSLChannelHyperOpt(IStrategy):
     sell_pmax_multiplier = CategoricalParameter([4, 7, 10, 15], default=3, space='sell')
     sell_pmax_length = CategoricalParameter([5, 15, 20, 30, 40, 50, 60], default=10, space='sell')
     sell_pmax_index_name = ''
+    # --------------------------------
 
     buy_trigger = "ssl_channel_buy"
     sell_trigger = "ssl_channel_sell"
@@ -163,20 +164,28 @@ class SSLChannelHyperOpt(IStrategy):
     startup_candle_count: int = 200
 
     use_custom_stoploss = shouldUseStopLoss.value
-    current_profit = CategoricalParameter([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=0.01, space='buy')
-    minimum_stoploss = CategoricalParameter([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.05, space='buy')
-    maximum_stoploss = CategoricalParameter([0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.3, space='buy')
+    current_profit = CategoricalParameter([0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=0.01, space='buy')
+    # minimum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.05, space='buy')
+    maximum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.3, space='buy')
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
-        if current_profit < self.current_profit.value:
-            return -1 # return a value bigger than the inital stoploss to keep using the inital stoploss
+        # # print(f"custom_stoploss: {current_profit}")
+        # if current_profit < self.current_profit:
+        #     return -1  # return a value bigger than the inital stoploss to keep using the inital stoploss
 
-        # After reaching the desired offset, allow the stoploss to trail by half the profit
-        desired_stoploss = current_profit / 2 
+        # # After reaching the desired offset, allow the stoploss to trail by half the profit
+        # desired_stoploss = current_profit / 2
 
-        # Use a minimum of 1.5% and a maximum of 3%
-        return max(min(desired_stoploss, self.minimum_stoploss), self.maximum_stoploss)
+        # # Use a minimum of 1.5% and a maximum of 3%
+        # return max(min(desired_stoploss, self.minimum_stoploss), self.maximum_stoploss)        
+        if current_profit > self.current_profit.value:
+            return stoploss_from_open(current_profit/2.0, current_profit=current_profit, is_short=trade.is_short)
+
+        if current_profit < 0.00:
+            return stoploss_from_open(-1 * self.maximum_stoploss.value, current_profit=current_profit, is_short=trade.is_short)
+
+        return -1
 
     def informative_pairs(self):
         """
@@ -325,44 +334,44 @@ class SSLChannelHyperOpt(IStrategy):
         long_exit = []
 
         # GUARDS AND TRENDS
-        long_exit.append(
-            (dataframe[self.sell_coral_index_name] > dataframe['close']) |
-            (dataframe[self.sell_pmax_index_name] == 'down') |
-            (dataframe[self.sell_ssl_channel_up_index_name] < dataframe[self.sell_ssl_channel_down_index_name])
-        )
+        # long_exit.append(
+        #     (dataframe[self.sell_coral_index_name] > dataframe['close']) |
+        #     (dataframe[self.sell_pmax_index_name] == 'down') |
+        #     (dataframe[self.sell_ssl_channel_up_index_name] < dataframe[self.sell_ssl_channel_down_index_name])
+        # )
         
         return long_exit
 
     def populate_long_exit_trigger(self, dataframe: DataFrame, long_exit):
-        long_exit.append(
-            (self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name)) |
-            ( 
-                (dataframe[self.sell_pmax_index_name] == 'down') &
-                (dataframe[self.sell_pmax_index_name].shift(1) == 'up')
-            )
-        )
+        # long_exit.append(
+        #     (self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name)) |
+        #     ( 
+        #         (dataframe[self.sell_pmax_index_name] == 'down') &
+        #         (dataframe[self.sell_pmax_index_name].shift(1) == 'up')
+        #     )
+        # )
         return long_exit
     
     def populate_short_exit_guards(self, dataframe: DataFrame) -> DataFrame:
         short_exit = []
 
         # GUARDS AND TRENDS
-        short_exit.append(
-            (dataframe[self.sell_coral_index_name] < dataframe['close']) |
-            (dataframe[self.sell_pmax_index_name] == 'up') |
-            (dataframe[self.sell_ssl_channel_up_index_name] > dataframe[self.sell_ssl_channel_down_index_name])
-        )
+        # short_exit.append(
+        #     (dataframe[self.sell_coral_index_name] < dataframe['close']) |
+        #     (dataframe[self.sell_pmax_index_name] == 'up') |
+        #     (dataframe[self.sell_ssl_channel_up_index_name] > dataframe[self.sell_ssl_channel_down_index_name])
+        # )
         
         return short_exit
     
     def populate_short_exit_trigger(self, dataframe: DataFrame, exit_short):
-        exit_short.append(
-            self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name) |
-            ( 
-                (dataframe[self.sell_pmax_index_name] == 'up') &
-                (dataframe[self.sell_pmax_index_name].shift(1) == 'down')
-            )
-        )
+        # exit_short.append(
+        #     self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name) |
+        #     ( 
+        #         (dataframe[self.sell_pmax_index_name] == 'up') &
+        #         (dataframe[self.sell_pmax_index_name].shift(1) == 'down')
+        #     )
+        # )
         return exit_short
     
     def ssl_cross_above(self, dataframe: DataFrame, up_index_name: str, down_index_name: str) -> bool:

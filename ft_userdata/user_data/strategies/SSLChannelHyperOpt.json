@@ -8,35 +8,34 @@
       "trailing_only_offset_is_reached": false
     },
     "buy": {
-      "buy_pmax_length": 20,
-      "buy_pmax_multiplier": 15,
+      "buy_pmax_length": 15,
+      "buy_pmax_multiplier": 4,
       "buy_pmax_period": 40,
-      "buy_small_ssl_length": 30,
-      "current_profit": 0.07,
-      "maximum_stoploss": 0.3,
-      "minimum_stoploss": 0.4,
+      "buy_small_ssl_length": 10,
+      "current_profit": 0.05,
+      "maximum_stoploss": 0.2,
       "shouldIgnoreRoi": false,
       "shouldUseStopLoss": true,
-      "should_exit_profit_only": false,
+      "should_exit_profit_only": true,
       "should_use_exit_signal": true
     },
     "sell": {
-      "sell_pmax_length": 30,
+      "sell_pmax_length": 40,
       "sell_pmax_multiplier": 7,
       "sell_pmax_period": 20,
-      "sell_ssl_length": 20
+      "sell_ssl_length": 30
     },
     "protection": {},
     "roi": {
-      "0": 0.21,
-      "110": 0.146,
-      "239": 0.052,
-      "345": 0
+      "0": 0.13,
+      "117": 0.112,
+      "210": 0.018,
+      "567": 0
     },
     "stoploss": {
-      "stoploss": -0.156
+      "stoploss": -0.153
     }
   },
   "ft_stratparam_v": 1,
-  "export_time": "2022-08-15 07:40:06.215243+00:00"
+  "export_time": "2022-08-15 16:40:47.495566+00:00"
 }
