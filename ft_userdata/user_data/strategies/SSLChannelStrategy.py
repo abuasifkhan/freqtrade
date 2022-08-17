@@ -6,6 +6,8 @@
 # 4. Define in Populate indicator method
 # 5. Define in entry/exit guards and triggers
 # -----------------------------------------
+from multiprocessing.resource_sharer import stop
+from typing import Optional
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from pandas import DataFrame
@@ -49,38 +51,44 @@ class SSLChannelStrategy(IStrategy):
     # Can this strategy go short?
     can_short: bool = True
 
-    # Buy hyperspace params:
+     # Buy hyperspace params:
     buy_params = {
-        "buy_pmax_length": 15,
-        "buy_pmax_multiplier": 4,
-        "buy_pmax_period": 40,
-        "buy_small_ssl_length": 10,
-        "current_profit": 0.05,
-        "maximum_stoploss": 0.2,
+        "buy_coral_sm": 14,
+        "buy_leverage": 9,
+        "buy_pmax_length": 60,
+        "buy_pmax_multiplier": 15,
+        "buy_pmax_period": 30,
+        "buy_small_ssl_length": 40,
+        "maximum_stoploss": 0.01,
+        "profit_threshold": 0.08,
         "shouldIgnoreRoi": False,
-        "shouldUseStopLoss": True,
+        "shouldUseStopLoss": False,
         "should_exit_profit_only": True,
-        "should_use_exit_signal": True,
+        "should_use_exit_signal": False,
     }
 
     # Sell hyperspace params:
     sell_params = {
-        "sell_pmax_length": 40,
+        "sell_coral_sm": 21,
+        "sell_pmax_length": 5,
         "sell_pmax_multiplier": 7,
-        "sell_pmax_period": 20,
-        "sell_ssl_length": 30,
+        "sell_pmax_period": 50,
+        "sell_ssl_length": 20,
+        "use_coral_as_exit_trigger": True,
+        "use_pmax_as_exit_trigger": False,
+        "use_ssl_as_exit_trigger": False,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.13,
-        "117": 0.112,
-        "210": 0.018,
-        "567": 0
+        "0": 0.137,
+        "21": 0.063,
+        "69": 0.02,
+        "166": 0
     }
 
     # Stoploss:
-    stoploss = -0.153
+    stoploss = -0.301
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -127,11 +135,11 @@ class SSLChannelStrategy(IStrategy):
     sell_ssl_channel_up_index_name = ''
 
     # --------------------------------
-    buy_coral_sm =  21
+    buy_coral_sm =  buy_params['buy_coral_sm']
     buy_coral_cd = 0.9
     buy_coral_index_name = ''
 
-    sell_coral_sm =  21
+    sell_coral_sm =  sell_params['sell_coral_sm']
     sell_coral_cd = 0.9
     sell_coral_index_name = ''
     # --------------------------------
@@ -157,14 +165,36 @@ class SSLChannelStrategy(IStrategy):
     use_exit_signal = should_use_exit_signal
     exit_profit_only = should_exit_profit_only
     ignore_roi_if_entry_signal = shouldIgnoreRoi
+    
+    use_coral_as_exit_trigger = sell_params["use_coral_as_exit_trigger"]
+    use_pmax_as_exit_trigger = sell_params["use_pmax_as_exit_trigger"]
+    use_ssl_as_exit_trigger = sell_params["use_ssl_as_exit_trigger"]
 
     # Number of candles the strategy requires before producing valid signals
     startup_candle_count: int = 200
 
     use_custom_stoploss = shouldUseStopLoss
-    current_profit = buy_params['current_profit']
+    profit_threshold = buy_params['profit_threshold']
     # minimum_stoploss = buy_params['minimum_stoploss']
     maximum_stoploss = buy_params['maximum_stoploss']
+
+    def leverage(self, pair: str, current_time: datetime, current_rate: float,
+                 proposed_leverage: float, max_leverage: float, entry_tag: Optional[str], side: str,
+                 **kwargs) -> float:
+        """
+        Customize leverage for each new trade. This method is only called in futures mode.
+
+        :param pair: Pair that's currently analyzed
+        :param current_time: datetime object, containing the current datetime
+        :param current_rate: Rate, calculated based on pricing settings in exit_pricing.
+        :param proposed_leverage: A leverage proposed by the bot.
+        :param max_leverage: Max leverage allowed on this pair
+        :param entry_tag: Optional entry_tag (buy_tag) if provided with the buy signal.
+        :param side: 'long' or 'short' - indicating the direction of the proposed trade
+        :return: A leverage amount, which is between 1.0 and max_leverage.
+        """
+        # print (self.buy_params['buy_leverage'])
+        return self.buy_params['buy_leverage']
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
@@ -176,8 +206,9 @@ class SSLChannelStrategy(IStrategy):
         # desired_stoploss = current_profit / 2
 
         # # Use a minimum of 1.5% and a maximum of 3%
-        # return max(min(desired_stoploss, self.minimum_stoploss), self.maximum_stoploss)        
-        if current_profit > self.current_profit:
+        # return max(min(desired_stoploss, self.minimum_stoploss), self.maximum_stoploss)      
+        # print (trade.stop_loss, trade.stop_loss_pct, trade.trades_open)  
+        if current_profit > self.profit_threshold:
             return stoploss_from_open(current_profit/2.0, current_profit=current_profit, is_short=trade.is_short)
 
         if current_profit < 0.00:
@@ -345,13 +376,14 @@ class SSLChannelStrategy(IStrategy):
         return long_exit
 
     def populate_long_exit_trigger(self, dataframe: DataFrame, long_exit):
-        # long_exit.append(
-        #     (self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name)) |
-        #     (
-        #         (dataframe[self.sell_pmax_index_name] == 'down') &
-        #         (dataframe[self.sell_pmax_index_name].shift(1) == 'up')
-        #     )
-        # )
+        long_exit.append(
+            # (self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name)) |
+            # (
+            #     (dataframe[self.sell_pmax_index_name] == 'down') &
+            #     (dataframe[self.sell_pmax_index_name].shift(1) == 'up')
+            # ) | 
+            (dataframe[self.buy_coral_index_name] < dataframe[self.buy_coral_index_name].shift(1))
+        )
         return long_exit
 
     def populate_short_exit_guards(self, dataframe: DataFrame) -> DataFrame:
@@ -368,13 +400,20 @@ class SSLChannelStrategy(IStrategy):
         return short_exit
 
     def populate_short_exit_trigger(self, dataframe: DataFrame, exit_short):
-        # exit_short.append(
-        #     self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name) |
-        #     (
-        #         (dataframe[self.sell_pmax_index_name] == 'up') &
-        #         (dataframe[self.sell_pmax_index_name].shift(1) == 'down')
-        #     )
-        # )
+        exit_short.append(
+            (   (self.use_ssl_as_exit_trigger == True) &
+                (self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
+            ) |
+            ( 
+                (self.use_pmax_as_exit_trigger == True) &
+                (dataframe[self.sell_pmax_index_name] == 'up') &
+                (dataframe[self.sell_pmax_index_name].shift(1) == 'down')
+            ) |
+            (
+                (self.use_coral_as_exit_trigger == True) &
+                (dataframe[self.sell_coral_index_name] > dataframe[self.sell_coral_index_name].shift(1))
+            )
+        )
         return exit_short
 
     def ssl_cross_above(self, dataframe: DataFrame, up_index_name: str, down_index_name: str) -> bool:
