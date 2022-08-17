@@ -6,6 +6,7 @@
 # 4. Define in Populate indicator method
 # 5. Define in entry/exit guards and triggers
 # -----------------------------------------
+from typing import Optional
 import numpy as np  # noqa
 import pandas as pd  # noqa
 from pandas import DataFrame
@@ -101,7 +102,7 @@ class SSLChannelHyperOpt(IStrategy):
         'buy_large_ssl_length': 30,
         'should_use_exit_signal': True,
         'should_exit_profit_only': True,
-        'current_profit': 0.01,
+        'profit_threshold': 0.01,
         'minimum_stoploss': 0.05,
         'maximum_stoploss': 0.3,
     }
@@ -118,6 +119,8 @@ class SSLChannelHyperOpt(IStrategy):
     buy_small_ssl_length = CategoricalParameter([5, 10, 20, 30, 40], default=buy_params['buy_small_ssl_length'], space='buy')
     # buy_large_ssl_length = CategoricalParameter([20, 30, 40, 50, 60, 70, 80, 90, 100], default=buy_params['buy_large_ssl_length'], space='buy')
     sell_ssl_length = CategoricalParameter([5, 10, 15, 20, 25, 30], default=sell_params['sell_ssl_length'], space='sell')
+    use_ssl_as_exit_trigger = BooleanParameter(default=False, space='sell')
+
     ssl_channel_down_index_pattern = 'ssl_channel_down_{0}'
     ssl_channel_up_index_pattern = 'ssl_channel_up_{0}'
     buy_small_ssl_channel_down_index_name = ''
@@ -129,13 +132,14 @@ class SSLChannelHyperOpt(IStrategy):
     # --------------------------------
 
     # --------------------------------
-    buy_coral_sm =  21
+    buy_coral_sm =  CategoricalParameter([14, 21], default=21, space='buy') # 21
     buy_coral_cd = 0.9
     buy_coral_index_name = ''
 
-    sell_coral_sm =  21
+    sell_coral_sm =  CategoricalParameter([14, 21], default=14, space='sell')
     sell_coral_cd = 0.9
     sell_coral_index_name = ''
+    use_coral_as_exit_trigger = BooleanParameter(default=False, space='sell')
     # --------------------------------
 
     # --------------------------------
@@ -148,7 +152,9 @@ class SSLChannelHyperOpt(IStrategy):
     sell_pmax_multiplier = CategoricalParameter([4, 7, 10, 15], default=3, space='sell')
     sell_pmax_length = CategoricalParameter([5, 15, 20, 30, 40, 50, 60], default=10, space='sell')
     sell_pmax_index_name = ''
+    use_pmax_as_exit_trigger = BooleanParameter(default=False, space='sell')
     # --------------------------------
+    buy_leverage = IntParameter(1, 20, default=1, space='buy')
 
     buy_trigger = "ssl_channel_buy"
     sell_trigger = "ssl_channel_sell"
@@ -164,22 +170,13 @@ class SSLChannelHyperOpt(IStrategy):
     startup_candle_count: int = 200
 
     use_custom_stoploss = shouldUseStopLoss.value
-    current_profit = CategoricalParameter([0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=0.01, space='buy')
+    profit_threshold = CategoricalParameter([0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=0.01, space='buy')
     # minimum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.05, space='buy')
     maximum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.3, space='buy')
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
-        # # print(f"custom_stoploss: {current_profit}")
-        # if current_profit < self.current_profit:
-        #     return -1  # return a value bigger than the inital stoploss to keep using the inital stoploss
-
-        # # After reaching the desired offset, allow the stoploss to trail by half the profit
-        # desired_stoploss = current_profit / 2
-
-        # # Use a minimum of 1.5% and a maximum of 3%
-        # return max(min(desired_stoploss, self.minimum_stoploss), self.maximum_stoploss)        
-        if current_profit > self.current_profit.value:
+        if current_profit > self.profit_threshold.value:
             return stoploss_from_open(current_profit/2.0, current_profit=current_profit, is_short=trade.is_short)
 
         if current_profit < 0.00:
@@ -199,6 +196,23 @@ class SSLChannelHyperOpt(IStrategy):
                             ]
         """
         return []
+
+    def leverage(self, pair: str, current_time: datetime, current_rate: float,
+                 proposed_leverage: float, max_leverage: float, entry_tag: Optional[str], side: str,
+                 **kwargs) -> float:
+        """
+        Customize leverage for each new trade. This method is only called in futures mode.
+
+        :param pair: Pair that's currently analyzed
+        :param current_time: datetime object, containing the current datetime
+        :param current_rate: Rate, calculated based on pricing settings in exit_pricing.
+        :param proposed_leverage: A leverage proposed by the bot.
+        :param max_leverage: Max leverage allowed on this pair
+        :param entry_tag: Optional entry_tag (buy_tag) if provided with the buy signal.
+        :param side: 'long' or 'short' - indicating the direction of the proposed trade
+        :return: A leverage amount, which is between 1.0 and max_leverage.
+        """
+        return self.buy_leverage.value
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         """
@@ -251,8 +265,8 @@ class SSLChannelHyperOpt(IStrategy):
         # self.buy_large_ssl_channel_up_index_name = self.ssl_channel_up_index_pattern.format(self.buy_large_ssl_length.value)
         self.sell_ssl_channel_down_index_name = self.ssl_channel_down_index_pattern.format(self.sell_ssl_length.value)
         self.sell_ssl_channel_up_index_name = self.ssl_channel_up_index_pattern.format(self.sell_ssl_length.value)
-        self.buy_coral_index_name = f'coral_{self.buy_coral_sm}_{self.buy_coral_cd}'
-        self.sell_coral_index_name = f'coral_{self.sell_coral_sm}_{self.sell_coral_cd}'
+        self.buy_coral_index_name = f'coral_{self.buy_coral_sm.value}_{self.buy_coral_cd}'
+        self.sell_coral_index_name = f'coral_{self.sell_coral_sm.value}_{self.sell_coral_cd}'
         self.buy_pmax_index_name = f'pmax_{self.buy_pmax_period.value}_{self.buy_pmax_multiplier.value}_{self.buy_pmax_length.value}_{1}'
         self.sell_pmax_index_name = f'pmax_{self.sell_pmax_period.value}_{self.sell_pmax_multiplier.value}_{self.sell_pmax_length.value}_{1}'
 
@@ -343,13 +357,20 @@ class SSLChannelHyperOpt(IStrategy):
         return long_exit
 
     def populate_long_exit_trigger(self, dataframe: DataFrame, long_exit):
-        # long_exit.append(
-        #     (self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name)) |
-        #     ( 
-        #         (dataframe[self.sell_pmax_index_name] == 'down') &
-        #         (dataframe[self.sell_pmax_index_name].shift(1) == 'up')
-        #     )
-        # )
+        long_exit.append(
+            (   (self.use_ssl_as_exit_trigger.value == True) &
+                (self.ssl_cross_below(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
+            ) |
+            ( 
+                (self.use_pmax_as_exit_trigger.value == True) &
+                (dataframe[self.sell_pmax_index_name] == 'down') &
+                (dataframe[self.sell_pmax_index_name].shift(1) == 'up')
+            ) |
+            (
+                (self.use_coral_as_exit_trigger.value == True) &
+                (dataframe[self.sell_coral_index_name] < dataframe[self.sell_coral_index_name].shift(1))
+            )
+        )
         return long_exit
     
     def populate_short_exit_guards(self, dataframe: DataFrame) -> DataFrame:
@@ -365,13 +386,20 @@ class SSLChannelHyperOpt(IStrategy):
         return short_exit
     
     def populate_short_exit_trigger(self, dataframe: DataFrame, exit_short):
-        # exit_short.append(
-        #     self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name) |
-        #     ( 
-        #         (dataframe[self.sell_pmax_index_name] == 'up') &
-        #         (dataframe[self.sell_pmax_index_name].shift(1) == 'down')
-        #     )
-        # )
+        exit_short.append(
+            (   (self.use_ssl_as_exit_trigger.value == True) &
+                (self.ssl_cross_above(dataframe, self.sell_ssl_channel_up_index_name, self.sell_ssl_channel_down_index_name))
+            ) |
+            ( 
+                (self.use_pmax_as_exit_trigger.value == True) &
+                (dataframe[self.sell_pmax_index_name] == 'up') &
+                (dataframe[self.sell_pmax_index_name].shift(1) == 'down')
+            ) |
+            (
+                (self.use_coral_as_exit_trigger.value == True) &
+                (dataframe[self.sell_coral_index_name] > dataframe[self.sell_coral_index_name].shift(1))
+            )
+        )
         return exit_short
     
     def ssl_cross_above(self, dataframe: DataFrame, up_index_name: str, down_index_name: str) -> bool:
@@ -382,11 +410,11 @@ class SSLChannelHyperOpt(IStrategy):
     
     def populate_coral_trend(self, dataframe: DataFrame) -> DataFrame:
         
-        dataframe[f'coral_{self.buy_coral_sm}_{self.buy_coral_cd}'] = coral_trend(dataframe, self.buy_coral_sm, self.buy_coral_cd)
+        dataframe[f'coral_{self.buy_coral_sm.value}_{self.buy_coral_cd}'] = coral_trend(dataframe, self.buy_coral_sm.value, self.buy_coral_cd)
         print ('Coral Trend Indicator Loaded')
 
         print('Loading Coral Trend Indicator')
-        dataframe[f'coral_{self.sell_coral_sm}_{self.sell_coral_cd}'] = coral_trend(dataframe, self.sell_coral_sm, self.sell_coral_cd)
+        dataframe[f'coral_{self.sell_coral_sm.value}_{self.sell_coral_cd}'] = coral_trend(dataframe, self.sell_coral_sm.value, self.sell_coral_cd)
         print ('Coral Trend Indicator successfully loaded! Sorry for the delay')
 
         return dataframe
