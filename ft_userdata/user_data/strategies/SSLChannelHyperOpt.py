@@ -112,14 +112,14 @@ class SSLChannelHyperOpt(IStrategy):
         'exit': 'gtc'
     }
 
-    shouldIgnoreRoi = BooleanParameter(default=buy_params['shouldIgnoreRoi'], space='buy')
+    shouldIgnoreRoi = True #BooleanParameter(default=buy_params['shouldIgnoreRoi'], space='buy')
     shouldUseStopLoss = BooleanParameter(default=buy_params['shouldUseStopLoss'], space='buy')
 
     # --------------------------------
-    buy_small_ssl_length = CategoricalParameter([5, 10, 20, 30, 40], default=buy_params['buy_small_ssl_length'], space='buy', optimize=True)
+    buy_small_ssl_length = CategoricalParameter([5, 5], default=buy_params['buy_small_ssl_length'], space='buy', optimize=True)
     # buy_large_ssl_length = CategoricalParameter([20, 30, 40, 50, 60, 70, 80, 90, 100], default=buy_params['buy_large_ssl_length'], space='buy')
-    sell_ssl_length = CategoricalParameter([5, 10, 15, 20, 25, 30], default=sell_params['sell_ssl_length'], space='sell')
-    use_ssl_as_exit_trigger = BooleanParameter(default=sell_params['use_ssl_as_exit_trigger'], space='sell')
+    sell_ssl_length = CategoricalParameter([30, 30], default=sell_params['sell_ssl_length'], space='sell')
+    use_ssl_as_exit_trigger = BooleanParameter(default=True, space='sell')
 
     ssl_channel_down_index_pattern = 'ssl_channel_down_{0}'
     ssl_channel_up_index_pattern = 'ssl_channel_up_{0}'
@@ -132,7 +132,7 @@ class SSLChannelHyperOpt(IStrategy):
     # --------------------------------
 
     # --------------------------------
-    buy_coral_sm =  CategoricalParameter([14, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
+    buy_coral_sm =  CategoricalParameter([21, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
     buy_coral_cd = 0.9
     buy_coral_index_name = ''
 
