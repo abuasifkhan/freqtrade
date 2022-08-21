@@ -55,33 +55,33 @@ class SSLChannelHyperOpt(IStrategy):
     # Buy hyperspace params:
     buy_params = {
         "buy_coral_sm": 21,
-        "buy_leverage": 19,
+        "buy_leverage": 4,
         "buy_small_ssl_length": 5,
-        "maximum_stoploss": 0.2,
-        "profit_threshold": 0.04,
+        "maximum_stoploss": 0.005,
+        "profit_threshold": 0.005,
         "shouldIgnoreRoi": True,
-        "shouldUseStopLoss": True,
-        "should_exit_profit_only": False,
+        "shouldUseStopLoss": False,
+        "should_exit_profit_only": True,
         "should_use_exit_signal": False,
     }
 
     # Sell hyperspace params:
     sell_params = {
-        "sell_ssl_length": 25,
+        "sell_ssl_length": 30,
         "use_coral_as_exit_trigger": True,
-        "use_ssl_as_exit_trigger": False,
+        "use_ssl_as_exit_trigger": True,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.259,
-        "35": 0.076,
-        "90": 0.037,
-        "205": 0
+        "0": 0.089,
+        "34": 0.057,
+        "89": 0.036,
+        "202": 0
     }
 
     # Stoploss:
-    stoploss = -0.133
+    stoploss = -0.078
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -90,7 +90,7 @@ class SSLChannelHyperOpt(IStrategy):
     trailing_only_offset_is_reached = False  # value loaded from strategy
 
     # Optimal timeframe for the strategy.
-    timeframe = '15m'
+    timeframe = '5m'
 
     # Run "populate_indicators()" only for new candle.
     process_only_new_candles = False
