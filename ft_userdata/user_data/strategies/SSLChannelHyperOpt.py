@@ -19,7 +19,7 @@ from technical.indicators.indicators import *
 import custom_indicators as cta
 
 from freqtrade.strategy import (BooleanParameter, CategoricalParameter, DecimalParameter,
-                                IStrategy, IntParameter, stoploss_from_open)
+                                IStrategy, IntParameter, stoploss_from_open, stoploss_from_absolute)
 
 # --------------------------------
 # Add your lib to import here
@@ -55,18 +55,34 @@ class SSLChannelHyperOpt(IStrategy):
     # Buy hyperspace params:
     buy_params = {
         "buy_coral_sm": 21,
-        "buy_leverage": 4,
+        "buy_leverage": 5,
         "buy_small_ssl_length": 5,
-        "maximum_stoploss": 0.005,
-        "profit_threshold": 0.005,
-        "shouldIgnoreRoi": True,
-        "shouldUseStopLoss": False,
+        "maximum_stoploss": 0.2,
+        "minimum_take_profit": 0.0125,
+        "profit_threshold": 0.05,
+        "shouldIgnoreRoi": False,
+        "shouldUseStopLoss": True,
         "should_exit_profit_only": True,
         "should_use_exit_signal": False,
     }
 
     # Sell hyperspace params:
     sell_params = {
+        "cexit_endtrend_respect_roi": True,
+        "cexit_pullback": False,
+        "cexit_pullback_amount": 0.014,
+        "cexit_pullback_respect_roi": False,
+        "cexit_roi_end": 0.002,
+        "cexit_roi_start": 0.013,
+        "cexit_roi_time": 1167,
+        "cexit_roi_type": "decay",
+        "cexit_trend_type": "candle",
+        "cstop_bail_how": "none",
+        "cstop_bail_roc": -2.138,
+        "cstop_bail_time": 339,
+        "cstop_bail_time_trend": True,
+        "cstop_loss_threshold": -0.048,
+        "cstop_max_stoploss": -0.013,
         "sell_ssl_length": 30,
         "use_coral_as_exit_trigger": True,
         "use_ssl_as_exit_trigger": True,
@@ -74,14 +90,14 @@ class SSLChannelHyperOpt(IStrategy):
 
     # ROI table:
     minimal_roi = {
-        "0": 0.089,
-        "34": 0.057,
-        "89": 0.036,
-        "202": 0
+        "0": 0.068,
+        "39": 0.031,
+        "99": 0.021,
+        "210": 0
     }
 
     # Stoploss:
-    stoploss = -0.078
+    stoploss = -0.09
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -112,7 +128,7 @@ class SSLChannelHyperOpt(IStrategy):
         'exit': 'gtc'
     }
 
-    shouldIgnoreRoi = True #BooleanParameter(default=buy_params['shouldIgnoreRoi'], space='buy')
+    shouldIgnoreRoi = BooleanParameter(default=buy_params['shouldIgnoreRoi'], space='buy')
     shouldUseStopLoss = BooleanParameter(default=buy_params['shouldUseStopLoss'], space='buy')
 
     # --------------------------------
@@ -120,6 +136,32 @@ class SSLChannelHyperOpt(IStrategy):
     # buy_large_ssl_length = CategoricalParameter([20, 30, 40, 50, 60, 70, 80, 90, 100], default=buy_params['buy_large_ssl_length'], space='buy')
     sell_ssl_length = CategoricalParameter([30, 30], default=sell_params['sell_ssl_length'], space='sell')
     use_ssl_as_exit_trigger = BooleanParameter(default=True, space='sell')
+
+    # Custom Sell Profit (formerly Dynamic ROI)
+    cexit_roi_type = CategoricalParameter(['static', 'decay', 'step'], default=sell_params['cexit_roi_type'], space='sell', load=True,
+                                          optimize=True)
+    cexit_roi_time = IntParameter(720, 1440, default=sell_params['cexit_roi_time'], space='sell', load=True, optimize=True)
+    cexit_roi_start = DecimalParameter(0.01, 0.05, default=sell_params['cexit_roi_start'], space='sell', load=True, optimize=True)
+    cexit_roi_end = DecimalParameter(0.0, 0.01, default=sell_params['cexit_roi_end'], space='sell', load=True, optimize=True)
+    cexit_trend_type = CategoricalParameter(['rmi', 'ssl', 'candle', 'any', 'none'], default=sell_params['cexit_trend_type'], space='sell',
+                                            load=True, optimize=True)
+    cexit_pullback = CategoricalParameter([True, False], default=sell_params['cexit_pullback'], space='sell', load=True, optimize=True)
+    cexit_pullback_amount = DecimalParameter(0.005, 0.03, default=sell_params['cexit_pullback_amount'], space='sell', load=True, optimize=True)
+    cexit_pullback_respect_roi = CategoricalParameter([True, False], default=sell_params['cexit_pullback_respect_roi'], space='sell', load=True,
+                                                      optimize=True)
+    cexit_endtrend_respect_roi = CategoricalParameter([True, False], default=sell_params['cexit_endtrend_respect_roi'], space='sell', load=True,
+                                                      optimize=True)
+
+    # Custom Stoploss
+    cstop_loss_threshold = DecimalParameter(-0.05, -0.01, default=sell_params['cstop_loss_threshold'], space='sell', load=True, optimize=True)
+    cstop_bail_how = CategoricalParameter(['roc', 'time', 'any', 'none'], default=sell_params['cstop_bail_how'], space='sell', load=True,
+                                          optimize=True)
+    cstop_bail_roc = DecimalParameter(-5.0, -1.0, default=-sell_params['cstop_bail_roc'], space='sell', load=True, optimize=True)
+    cstop_bail_time = IntParameter(60, 1440, default=sell_params['cstop_bail_time'], space='sell', load=True, optimize=True)
+    cstop_bail_time_trend = CategoricalParameter([True, False], default=sell_params['cstop_bail_time_trend'], space='sell', load=True, optimize=True)
+    cstop_max_stoploss =  DecimalParameter(-0.30, -0.01, default=sell_params['cstop_max_stoploss'], space='sell', load=True, optimize=True)
+    custom_trade_info = {}
+
 
     ssl_channel_down_index_pattern = 'ssl_channel_down_{0}'
     ssl_channel_up_index_pattern = 'ssl_channel_up_{0}'
@@ -170,43 +212,104 @@ class SSLChannelHyperOpt(IStrategy):
     startup_candle_count: int = 200
 
     use_custom_stoploss = shouldUseStopLoss.value
-    profit_threshold = CategoricalParameter([0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=buy_params['profit_threshold'], space='buy')
+    profit_threshold = CategoricalParameter([0.002, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=buy_params['profit_threshold'], space='buy')
     # minimum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=0.05, space='buy')
-    maximum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5], default=buy_params['maximum_stoploss'], space='buy')
+    maximum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=buy_params['maximum_stoploss'], space='buy')
+    minimum_take_profit = CategoricalParameter([0.0025, 0.005, 0.0075, 0.01, 0.0125, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=buy_params['minimum_take_profit'], space='buy')
 
     # Define a custom stoploss space.
     def stoploss_space():
         return [SKDecimal(-0.02, -0.01, decimals=3, name='stoploss')]
 
-    def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime,
-                        current_rate: float, current_profit: float, **kwargs) -> float:
-        # Manage losing trades and open room for better ones.
+    def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime, current_rate: float,
+                        current_profit: float, **kwargs) -> float:
 
-        if (current_profit > 0):
-            return 0.99
-        else:
-            trade_time_50 = current_time - datetime.timedelta(minutes=50)
+        dataframe, _ = self.dp.get_analyzed_dataframe(pair=pair, timeframe=self.timeframe)
+        last_candle = dataframe.iloc[-1].squeeze()
+        trade_dur = int((current_time.timestamp() - trade.open_date_utc.timestamp()) // 60)
+        in_trend = self.custom_trade_info[trade.pair]['had-trend']
 
-            # Trade open more then 60 minutes. For this strategy it's means -> loss
-            # Let's try to minimize the loss
+        # limit stoploss
+        if current_profit <  self.cstop_max_stoploss.value:
+            return 0.01
 
-            if (trade_time_50 > trade.open_date_utc):
-
-                try:
-                    number_of_candle_shift = int((trade_time_50 - trade.open_date_utc).total_seconds() / 300)
-                    dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
-                    candle = dataframe.iloc[-number_of_candle_shift].squeeze()
-
-                    # Are we still sinking?
-                    if current_rate * 1.015 < candle['open']:
-                        return 0.01
-
-                except IndexError as error:
-
-                    # Whoops, set stoploss at 5%
+        # Determine how we sell when we are in a loss
+        if current_profit < self.cstop_loss_threshold.value:
+            if self.cstop_bail_how.value == 'roc' or self.cstop_bail_how.value == 'any':
+                # Dynamic bailout based on rate of change
+                if last_candle['sroc'] <= self.cstop_bail_roc.value:
                     return 0.01
+            if self.cstop_bail_how.value == 'time' or self.cstop_bail_how.value == 'any':
+                # Dynamic bailout based on time, unless time_trend is true and there is a potential reversal
+                if trade_dur > self.cstop_bail_time.value:
+                    if self.cstop_bail_time_trend.value == True and in_trend == True:
+                        return 1
+                    else:
+                        return 0.01
+        return 1
+    
+    def custom_exit(self, pair: str, trade: 'Trade', current_time: 'datetime', current_rate: float,
+                    current_profit: float, **kwargs):
 
-        return 0.99
+        dataframe, _ = self.dp.get_analyzed_dataframe(pair=pair, timeframe=self.timeframe)
+        last_candle = dataframe.iloc[-1].squeeze()
+
+        trade_dur = int((current_time.timestamp() - trade.open_date_utc.timestamp()) // 60)
+        max_profit = max(0, trade.calc_profit_ratio(trade.max_rate))
+        pullback_value = max(0, (max_profit - self.cexit_pullback_amount.value))
+        in_trend = False
+
+        # Determine our current ROI point based on the defined type
+        if self.cexit_roi_type.value == 'static':
+            min_roi = self.cexit_roi_start.value
+        elif self.cexit_roi_type.value == 'decay':
+            min_roi = cta.linear_decay(self.cexit_roi_start.value, self.cexit_roi_end.value, 0,
+                                       self.cexit_roi_time.value, trade_dur)
+        elif self.cexit_roi_type.value == 'step':
+            if trade_dur < self.cexit_roi_time.value:
+                min_roi = self.cexit_roi_start.value
+            else:
+                min_roi = self.cexit_roi_end.value
+
+        # Determine if there is a trend
+        if self.cexit_trend_type.value == 'rmi' or self.cexit_trend_type.value == 'any':
+            if last_candle['rmi-up-trend'] == 1:
+                in_trend = True
+        if self.cexit_trend_type.value == 'ssl' or self.cexit_trend_type.value == 'any':
+            if last_candle['ssl-dir'] == 'up':
+                in_trend = True
+        if self.cexit_trend_type.value == 'candle' or self.cexit_trend_type.value == 'any':
+            if last_candle['candle-up-trend'] == 1:
+                in_trend = True
+
+        # Don't sell if we are in a trend unless the pullback threshold is met
+        if in_trend == True and current_profit > 0:
+            # Record that we were in a trend for this trade/pair for a more useful sell message later
+            self.custom_trade_info[trade.pair]['had-trend'] = True
+            # If pullback is enabled and profit has pulled back allow a sell, maybe
+            if self.cexit_pullback.value == True and (current_profit <= pullback_value):
+                if self.cexit_pullback_respect_roi.value == True and current_profit > min_roi:
+                    return 'intrend_pullback_roi'
+                elif self.cexit_pullback_respect_roi.value == False:
+                    if current_profit > min_roi:
+                        return 'intrend_pullback_roi'
+                    else:
+                        return 'intrend_pullback_noroi'
+            # We are in a trend and pullback is disabled or has not happened or various criteria were not met, hold
+            return None
+        # If we are not in a trend, just use the roi value
+        elif in_trend == False:
+            if self.custom_trade_info[trade.pair]['had-trend']:
+                if current_profit > min_roi:
+                    self.custom_trade_info[trade.pair]['had-trend'] = False
+                    return 'trend_roi'
+                elif self.cexit_endtrend_respect_roi.value == False:
+                    self.custom_trade_info[trade.pair]['had-trend'] = False
+                    return 'trend_noroi'
+            elif current_profit > min_roi:
+                return 'notrend_roi'
+        else:
+            return None
 
     def informative_pairs(self):
         """
@@ -250,10 +353,25 @@ class SSLChannelHyperOpt(IStrategy):
         :return: a Dataframe with all mandatory indicators for the strategies
         """
 
+        # RMI: https://www.tradingview.com/script/kwIt9OgQ-Relative-Momentum-Index/
+        dataframe['rmi'] = cta.RMI(dataframe, length=24, mom=5)
+        dataframe['rmi-up'] = np.where(dataframe['rmi'] >= dataframe['rmi'].shift(), 1, 0)
+        dataframe['rmi-up-trend'] = np.where(dataframe['rmi-up'].rolling(5).sum() >= 3, 1, 0)
+        dataframe['rmi-dn'] = np.where(dataframe['rmi'] <= dataframe['rmi'].shift(), 1, 0)
+        dataframe['rmi-dn-count'] = dataframe['rmi-dn'].rolling(8).sum()
+        dataframe['candle-up'] = np.where(dataframe['close'] >= dataframe['open'], 1, 0)
+        dataframe['candle-up-trend'] = np.where(dataframe['candle-up'].rolling(5).sum() >= 3, 1, 0)
+
+        if not metadata['pair'] in self.custom_trade_info:
+            self.custom_trade_info[metadata['pair']] = {}
+            if not 'had-trend' in self.custom_trade_info[metadata["pair"]]:
+                self.custom_trade_info[metadata['pair']]['had-trend'] = False
+
         # Indicators used only for ROI and Custom Stoploss
         ssldown, sslup = cta.SSLChannels_ATR(dataframe, length=21)
         dataframe['sroc'] = cta.SROC(dataframe, roclen=21, emalen=13, smooth=21)
         dataframe['ssl-dir'] = np.where(sslup > ssldown, 'up', 'down')
+        dataframe['atr'] = qtpylib.atr(dataframe)
         # dataframe['rsi'] = cta.rsi(dataframe, length=7)
 
         # MA Streak: https://www.tradingview.com/script/Yq1z7cIv-MA-Streak-Can-Show-When-a-Run-Is-Getting-Long-in-the-Tooth/
@@ -330,21 +448,21 @@ class SSLChannelHyperOpt(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.init_index_names()
 
-        long_exit = self.populate_long_exit_guards(dataframe)
-        long_exit = self.populate_long_exit_trigger(dataframe, long_exit = long_exit)
+        # long_exit = self.populate_long_exit_guards(dataframe)
+        # long_exit = self.populate_long_exit_trigger(dataframe, long_exit = long_exit)
 
-        if long_exit:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, long_exit),
-                'exit_long'] = 1
+        # if long_exit:
+        #     dataframe.loc[
+        #         reduce(lambda x, y: x & y, long_exit),
+        #         'exit_long'] = 1
         
-        short_exit = self.populate_short_exit_guards(dataframe)
-        short_exit = self.populate_short_exit_trigger(dataframe, exit_short = short_exit)
+        # short_exit = self.populate_short_exit_guards(dataframe)
+        # short_exit = self.populate_short_exit_trigger(dataframe, exit_short = short_exit)
 
-        if short_exit:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, short_exit),
-                'exit_short'] = 1
+        # if short_exit:
+        #     dataframe.loc[
+        #         reduce(lambda x, y: x & y, short_exit),
+        #         'exit_short'] = 1
             
         return dataframe
 
@@ -359,7 +477,9 @@ class SSLChannelHyperOpt(IStrategy):
         return long_condition
     
     def populate_long_trigger(self, dataframe: DataFrame, long_condition):
-        long_condition.append(self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name))
+        long_condition.append(
+            self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
+            )
 
         return long_condition
     
