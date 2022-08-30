@@ -55,49 +55,47 @@ class SSLChannelHyperOpt(IStrategy):
     # Buy hyperspace params:
     buy_params = {
         "buy_coral_sm": 21,
-        "buy_leverage": 5,
+        "buy_leverage": 10,
         "buy_small_ssl_length": 5,
-        "maximum_stoploss": 0.2,
-        "minimum_take_profit": 0.0125,
-        "profit_threshold": 0.05,
         "shouldIgnoreRoi": False,
         "shouldUseStopLoss": True,
         "should_exit_profit_only": True,
-        "should_use_exit_signal": False,
+        "should_use_exit_signal": True,
     }
 
     # Sell hyperspace params:
     sell_params = {
         "cexit_endtrend_respect_roi": True,
         "cexit_pullback": False,
-        "cexit_pullback_amount": 0.014,
-        "cexit_pullback_respect_roi": False,
-        "cexit_roi_end": 0.002,
-        "cexit_roi_start": 0.013,
-        "cexit_roi_time": 1167,
-        "cexit_roi_type": "decay",
-        "cexit_trend_type": "candle",
-        "cstop_bail_how": "none",
-        "cstop_bail_roc": -2.138,
-        "cstop_bail_time": 339,
-        "cstop_bail_time_trend": True,
-        "cstop_loss_threshold": -0.048,
-        "cstop_max_stoploss": -0.013,
+        "cexit_pullback_amount": 0.021,
+        "cexit_pullback_respect_roi": True,
+        "cexit_roi_end": 0.003,
+        "cexit_roi_start": 0.046,
+        "cexit_roi_time": 794,
+        "cexit_roi_type": "step",
+        "cexit_trend_type": "rmi",
+        "cstop_bail_how": "any",
+        "cstop_bail_roc": -2.241,
+        "cstop_bail_time": 899,
+        "cstop_bail_time_trend": False,
+        "cstop_loss_threshold": -0.021,
+        "cstop_max_stoploss": -0.061,
+        "maximum_stoploss": 0.005,
+        "minimum_take_profit": 0.8,
+        "profit_trigger": 0.01,
         "sell_ssl_length": 30,
-        "use_coral_as_exit_trigger": True,
-        "use_ssl_as_exit_trigger": True,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.068,
-        "39": 0.031,
-        "99": 0.021,
-        "210": 0
+        "0": 0.347,
+        "69": 0.128,
+        "184": 0.06,
+        "270": 0
     }
 
     # Stoploss:
-    stoploss = -0.09
+    stoploss = -0.334
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -134,7 +132,6 @@ class SSLChannelHyperOpt(IStrategy):
     # --------------------------------
     buy_small_ssl_length = CategoricalParameter([5, 5], default=buy_params['buy_small_ssl_length'], space='buy', optimize=True)
     sell_ssl_length = CategoricalParameter([30, 30], default=sell_params['sell_ssl_length'], space='sell')
-    use_ssl_as_exit_trigger = BooleanParameter(default=True, space='sell')
 
     # Custom Sell Profit (formerly Dynamic ROI)
     cexit_roi_type = CategoricalParameter(['static', 'decay', 'step'], default=sell_params['cexit_roi_type'], space='sell', load=True,
@@ -174,7 +171,6 @@ class SSLChannelHyperOpt(IStrategy):
     buy_coral_sm =  CategoricalParameter([21, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
     buy_coral_cd = 0.9
     buy_coral_index_name = ''
-    use_coral_as_exit_trigger = BooleanParameter(default=sell_params['use_coral_as_exit_trigger'], space='sell')
     # --------------------------------
 
     buy_leverage = IntParameter(1, 20, default=1, space='buy')
@@ -193,9 +189,9 @@ class SSLChannelHyperOpt(IStrategy):
     startup_candle_count: int = 200
 
     use_custom_stoploss = shouldUseStopLoss.value
-    profit_threshold = CategoricalParameter([0.002, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=buy_params['profit_threshold'], space='buy')
-    maximum_stoploss = CategoricalParameter([0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=buy_params['maximum_stoploss'], space='buy')
-    minimum_take_profit = CategoricalParameter([0.0025, 0.005, 0.0075, 0.01, 0.0125, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=buy_params['minimum_take_profit'], space='buy')
+    profit_trigger = CategoricalParameter([0.002, 0.003, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=sell_params['profit_trigger'], space='sell')
+    maximum_stoploss = CategoricalParameter([0.002, 0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=sell_params['maximum_stoploss'], space='sell')
+    minimum_take_profit = CategoricalParameter([0.0025, 0.005, 0.0075, 0.01, 0.0125, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=sell_params['minimum_take_profit'], space='sell')
 
     # Define a custom stoploss space.
     def stoploss_space():
@@ -208,6 +204,11 @@ class SSLChannelHyperOpt(IStrategy):
         last_candle = dataframe.iloc[-1].squeeze()
         trade_dur = int((current_time.timestamp() - trade.open_date_utc.timestamp()) // 60)
         in_trend = self.custom_trade_info[trade.pair]['had-trend']
+
+        if current_profit > self.profit_trigger.value:
+            return self.minimum_take_profit.value
+        elif current_profit < 0:
+            return self.maximum_stoploss.value
 
         # limit stoploss
         if current_profit <  self.cstop_max_stoploss.value:
@@ -411,9 +412,6 @@ class SSLChannelHyperOpt(IStrategy):
         for sm in self.buy_coral_sm.range:
             dataframe[f'coral_{sm}_{self.buy_coral_cd}'] = coral_trend(dataframe, sm, self.buy_coral_cd)
         print ('Coral Trend Indicator Loaded')
-
-        print('Loading Coral Trend Indicator')
-        print ('Coral Trend Indicator successfully loaded! Sorry for the delay')
 
         return dataframe
 
