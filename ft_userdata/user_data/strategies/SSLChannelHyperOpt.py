@@ -55,47 +55,47 @@ class SSLChannelHyperOpt(IStrategy):
     # Buy hyperspace params:
     buy_params = {
         "buy_coral_sm": 21,
-        "buy_leverage": 10,
+        "buy_leverage": 1,
         "buy_small_ssl_length": 5,
-        "shouldIgnoreRoi": False,
+        "shouldIgnoreRoi": True,
         "shouldUseStopLoss": True,
         "should_exit_profit_only": True,
-        "should_use_exit_signal": True,
+        "should_use_exit_signal": False,
     }
 
     # Sell hyperspace params:
     sell_params = {
-        "cexit_endtrend_respect_roi": True,
+        "cexit_endtrend_respect_roi": False,
         "cexit_pullback": False,
-        "cexit_pullback_amount": 0.021,
+        "cexit_pullback_amount": 0.007,
         "cexit_pullback_respect_roi": True,
-        "cexit_roi_end": 0.003,
-        "cexit_roi_start": 0.046,
-        "cexit_roi_time": 794,
-        "cexit_roi_type": "step",
-        "cexit_trend_type": "rmi",
-        "cstop_bail_how": "any",
-        "cstop_bail_roc": -2.241,
-        "cstop_bail_time": 899,
-        "cstop_bail_time_trend": False,
-        "cstop_loss_threshold": -0.021,
-        "cstop_max_stoploss": -0.061,
-        "maximum_stoploss": 0.005,
-        "minimum_take_profit": 0.8,
-        "profit_trigger": 0.01,
+        "cexit_roi_end": 0.0,
+        "cexit_roi_start": 0.05,
+        "cexit_roi_time": 780,
+        "cexit_roi_type": "static",
+        "cexit_trend_type": "none",
+        "cstop_bail_how": "none",
+        "cstop_bail_roc": -1.455,
+        "cstop_bail_time": 371,
+        "cstop_bail_time_trend": True,
+        "cstop_loss_threshold": -0.044,
+        "cstop_max_stoploss": -0.275,
+        "maximum_stoploss": 0.4,
+        "minimum_take_profit": 0.25,
+        "profit_trigger": 0.003,
         "sell_ssl_length": 30,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.347,
-        "69": 0.128,
-        "184": 0.06,
-        "270": 0
+        "0": 0.431,
+        "51": 0.128,
+        "166": 0.032,
+        "210": 0
     }
 
     # Stoploss:
-    stoploss = -0.334
+    stoploss = -0.278
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
