@@ -54,7 +54,6 @@ class SSLChannelHyperOpt(IStrategy):
 
      # Buy hyperspace params:
     buy_params = {
-        "buy_coral_sm": 21,
         "buy_leverage": 1,
         "buy_small_ssl_length": 5,
         "shouldIgnoreRoi": False,
@@ -63,8 +62,7 @@ class SSLChannelHyperOpt(IStrategy):
         "should_use_exit_signal": True,
         "use_1d_cross": False,
         "use_1h_cross": True,
-        "use_coral": False,
-        "use_low_profit": True,
+        "use_low_profit": False,
     }
 
     # Sell hyperspace params:
@@ -177,10 +175,10 @@ class SSLChannelHyperOpt(IStrategy):
     # --------------------------------
 
     # --------------------------------
-    buy_coral_sm =  CategoricalParameter([14, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
-    use_coral = CategoricalParameter([True, False], default=buy_params['use_coral'], space='buy') # True
-    buy_coral_cd = 0.9
-    buy_coral_index_name = ''
+    # buy_coral_sm =  CategoricalParameter([14, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
+    # use_coral = CategoricalParameter([True, False], default=buy_params['use_coral'], space='buy') # True
+    # buy_coral_cd = 0.9
+    # buy_coral_index_name = ''
     # --------------------------------
 
     buy_leverage = IntParameter(1, 20, default=1, space='buy')
@@ -205,8 +203,8 @@ class SSLChannelHyperOpt(IStrategy):
     minimum_take_profit = CategoricalParameter([0.0025, 0.005, 0.0075, 0.01, 0.0125, 0.03, 0.04, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=sell_params['minimum_take_profit'], space='sell')
 
     # Define a custom stoploss space.
-    def stoploss_space():
-        return [SKDecimal(-0.02, -0.01, decimals=3, name='stoploss')]
+    # def stoploss_space():
+    #     return [SKDecimal(-0.02, -0.01, decimals=3, name='stoploss')]
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:
@@ -242,7 +240,7 @@ class SSLChannelHyperOpt(IStrategy):
                     if self.cstop_bail_time_trend.value == True and in_trend == True:
                         return 1
                     else:
-                        return 0.01
+                        return self.minimum_stoploss.value
         return 1
     
     def custom_exit(self, pair: str, trade: 'Trade', current_time: 'datetime', current_rate: float,
@@ -369,7 +367,7 @@ class SSLChannelHyperOpt(IStrategy):
         dataframe['rolling_vwap'] = qtpylib.rolling_vwap(dataframe)
         
         ###################### Coral Trend Indicator ################################
-        dataframe = self.populate_coral_trend(dataframe)
+        # dataframe = self.populate_coral_trend(dataframe)
 
         # ###################### End Coral Trend Indicator ################################
 
@@ -431,15 +429,15 @@ class SSLChannelHyperOpt(IStrategy):
         self.buy_small_ssl_channel_up_index_name = self.ssl_channel_up_index_pattern.format(self.buy_small_ssl_length.value)
         self.sell_ssl_channel_down_index_name = self.ssl_channel_down_index_pattern.format(self.sell_ssl_length.value)
         self.sell_ssl_channel_up_index_name = self.ssl_channel_up_index_pattern.format(self.sell_ssl_length.value)
-        self.buy_coral_index_name = f'coral_{self.buy_coral_sm.value}_{self.buy_coral_cd}'
+        # self.buy_coral_index_name = f'coral_{self.buy_coral_sm.value}_{self.buy_coral_cd}'
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.init_index_names()
 
         long_condition = []
 
-        if self.use_coral.value:
-            long_condition.append((dataframe[self.buy_coral_index_name] < dataframe['close']))
+        # if self.use_coral.value:
+        #     long_condition.append((dataframe[self.buy_coral_index_name] < dataframe['close']))
         
         if self.use_1d_cross.value:
             long_condition.append((dataframe['crossabove_1d'] == True))
@@ -449,7 +447,11 @@ class SSLChannelHyperOpt(IStrategy):
         
         long_condition.append(
             ( 
-                (dataframe[f'fastd_1d'] < dataframe[f'fastk_1d'])
+                (dataframe['volume'] > 0) &
+                (dataframe[f'fastd_1d'] < dataframe[f'fastk_1d']) &
+                (dataframe[f'fastd_1h'] < dataframe[f'fastk_1h']) &
+                (dataframe['close'] <= dataframe['bb_upperband_1h']) &
+                (dataframe['close'] > dataframe['bb_middleband_1h'])
             ) &
             (
                 (dataframe[f'fastd_{self.inf_timeframe}'] < dataframe[f'fastk_{self.inf_timeframe}'])
@@ -470,8 +472,8 @@ class SSLChannelHyperOpt(IStrategy):
         short_condition = []
 
         # GUARDS AND TRENDS
-        if self.use_coral.value:
-            short_condition.append((dataframe[self.buy_coral_index_name] > dataframe['close']))
+        # if self.use_coral.value:
+        #     short_condition.append((dataframe[self.buy_coral_index_name] > dataframe['close']))
         
         if self.use_1d_cross.value:
             short_condition.append((dataframe['crossbelow_1d'] == True))
@@ -481,7 +483,11 @@ class SSLChannelHyperOpt(IStrategy):
 
         short_condition.append(
             ( 
-                (dataframe[f'fastd_1d'] > dataframe[f'fastk_1d'])
+                (dataframe['volume'] > 0) &
+                (dataframe[f'fastd_1d'] > dataframe[f'fastk_1d']) &
+                (dataframe[f'fastd_1h'] > dataframe[f'fastk_1h']) &
+                (dataframe['close'] >= dataframe['bb_lowerband_1h']) &
+                (dataframe['close'] < dataframe['bb_middleband_1h'])
             ) &
             (
                 (dataframe[f'fastd_{self.inf_timeframe}'] > dataframe[f'fastk_{self.inf_timeframe}'])
@@ -502,7 +508,32 @@ class SSLChannelHyperOpt(IStrategy):
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.init_index_names()
-            
+
+        long_conditions = []
+        long_conditions.append(
+                dataframe['close'] > dataframe['bb_upperband']
+            )
+
+        # Check that volume is not 0
+        long_conditions.append(dataframe['volume'] > 0)
+
+        if long_conditions:
+            dataframe.loc[
+                reduce(lambda x, y: x & y, long_conditions),
+                'exit_long'] = 1
+
+        short_conditions = []
+        short_conditions.append(
+                dataframe['close'] > dataframe['bb_lowerband']
+            )
+
+        # Check that volume is not 0
+        short_conditions.append(dataframe['volume'] > 0)
+
+        if short_conditions:
+            dataframe.loc[
+                reduce(lambda x, y: x & y, short_conditions),
+                'exit_long'] = 1
         return dataframe
     
     def ssl_cross_above(self, dataframe: DataFrame, up_index_name: str, down_index_name: str) -> bool:
