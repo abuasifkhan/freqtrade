@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 # 2.15: Add backtest history endpoints
 # 2.16: Additional daily metrics
 # 2.17: Forceentry - leverage, partial force_exit
-API_VERSION = 2.17
+# 2.20: Add websocket endpoints
+API_VERSION = 2.20
 
 # Public API, requires no auth.
 router_public = APIRouter()
@@ -216,9 +217,10 @@ def stop(rpc: RPC = Depends(get_rpc)):
     return rpc._rpc_stop()
 
 
+@router.post('/stopentry', response_model=StatusMsg, tags=['botcontrol'])
 @router.post('/stopbuy', response_model=StatusMsg, tags=['botcontrol'])
 def stop_buy(rpc: RPC = Depends(get_rpc)):
-    return rpc._rpc_stopbuy()
+    return rpc._rpc_stopentry()
 
 
 @router.post('/reload_config', response_model=StatusMsg, tags=['botcontrol'])
