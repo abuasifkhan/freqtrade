@@ -115,10 +115,9 @@ class SSLChannelHyperOpt(IStrategy):
 
     # Stoploss:
     stoploss = -0.046
-    # stoploss = -0.99
 
     # Trailing stop:
-    trailing_stop = False  # value loaded from strategy
+    trailing_stop = True  # value loaded from strategy
     trailing_stop_positive = None  # value loaded from strategy
     trailing_stop_positive_offset = 0.0  # value loaded from strategy
     trailing_only_offset_is_reached = False  # value loaded from strategy
