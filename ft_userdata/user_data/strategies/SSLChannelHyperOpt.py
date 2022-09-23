@@ -6,6 +6,7 @@
 # 4. Define in Populate indicator method
 # 5. Define in entry/exit guards and triggers
 # -----------------------------------------
+from curses import meta
 from typing import Optional
 from freqtrade.optimize.space.decimalspace import SKDecimal
 import numpy as np  # noqa
@@ -52,17 +53,32 @@ class SSLChannelHyperOpt(IStrategy):
     # Can this strategy go short?
     can_short: bool = True
 
-     # Buy hyperspace params:
+    # Buy hyperspace params:
     buy_params = {
-        "buy_leverage": 1,
+        "buy_coral_sm": 14,
+        "buy_leverage": 5,
         "buy_small_ssl_length": 5,
+        "macd_fast_period": 15,
+        "macd_signal": 18,
+        "macd_slow_period": 70,
+        "sar_accelaretion": 0.06,
+        "sar_maximum": 0.3,
         "shouldIgnoreRoi": False,
         "shouldUseStopLoss": True,
-        "should_exit_profit_only": False,
-        "should_use_exit_signal": True,
+        "should_exit_profit_only": True,
+        "should_use_exit_signal": False,
         "use_1d_cross": False,
-        "use_1h_cross": True,
-        "use_low_profit": False,
+        "use_1d_guard": False,
+        "use_1h_cross": False,
+        "use_1h_guard": False,
+        "use_bb_trigger": True,
+        "use_coral_color_change_as_trigger": True,
+        "use_low_profit": True,
+        "use_macd_as_guard": False,
+        "use_macd_crossover": False,
+        "use_sar_as_guard": False,
+        "use_sar_ema_cross": True,
+        "use_stoc_trigger": False,
     }
 
     # Sell hyperspace params:
@@ -71,40 +87,42 @@ class SSLChannelHyperOpt(IStrategy):
         "cexit_pullback": False,
         "cexit_pullback_amount": 0.011,
         "cexit_pullback_respect_roi": False,
-        "cexit_roi_end": 0.01,
-        "cexit_roi_start": 0.038,
-        "cexit_roi_time": 915,
+        "cexit_roi_end": 0.001,
+        "cexit_roi_start": 0.047,
+        "cexit_roi_time": 1066,
         "cexit_roi_type": "decay",
-        "cexit_trend_type": "any",
-        "cstop_bail_how": "time",
-        "cstop_bail_roc": -1.098,
-        "cstop_bail_time": 772,
-        "cstop_bail_time_trend": True,
-        "cstop_loss_threshold": -0.021,
-        "cstop_max_stoploss": -0.99,
-        "maximum_stoploss": 0.6,
-        "minimum_stoploss": 0.4,
-        "minimum_take_profit": 0.6,
-        "profit_trigger": 0.08,
+        "cexit_trend_type": "ssl",
+        "cstop_bail_how": "any",
+        "cstop_bail_roc": -1.492,
+        "cstop_bail_time": 230,
+        "cstop_bail_time_trend": False,
+        "cstop_loss_threshold": -0.056,
+        "cstop_max_stoploss": -0.08,
+        "maximum_stoploss": 0.9,
+        "minimum_stoploss": 0.3,
+        "minimum_take_profit": 0.8,
+        "profit_trigger": 0.09,
         "sell_ssl_length": 200,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.118,
-        "18": 0.067,
-        "77": 0.011,
-        "197": 0
+        "0": 0.27,
+        "12": 0.075,
+        "54": 0.017,
+        "160": 0
     }
 
     # Stoploss:
-    stoploss = -0.99
+    stoploss = -0.046
+    # stoploss = -0.99
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
     trailing_stop_positive = None  # value loaded from strategy
     trailing_stop_positive_offset = 0.0  # value loaded from strategy
     trailing_only_offset_is_reached = False  # value loaded from strategy
+
 
     # Optimal timeframe for the strategy.
     timeframe = '5m'
@@ -137,6 +155,18 @@ class SSLChannelHyperOpt(IStrategy):
     buy_small_ssl_length = CategoricalParameter([5, 10], default=buy_params['buy_small_ssl_length'], space='buy', optimize=True)
     sell_ssl_length = CategoricalParameter([20, 30, 50, 100, 200], default=sell_params['sell_ssl_length'], space='sell')
 
+    # --------------SAR---------------
+    use_sar_as_guard = BooleanParameter(space='buy', default = buy_params['use_sar_as_guard'])
+    sar_accelaretion = CategoricalParameter([0.02, 0.04, 0.06, 0.08], default = buy_params['sar_accelaretion'], space='buy')
+    sar_maximum = CategoricalParameter([0.1, 0.2, 0.3], default=buy_params['sar_maximum'], space='buy')
+    sar_index_name = ''
+
+    use_macd_as_guard = BooleanParameter(space="buy", default = buy_params['use_macd_as_guard'])
+    macd_fast_period = CategoricalParameter([6, 10, 15, 20], default=buy_params['macd_fast_period'], space="buy")
+    macd_slow_period = CategoricalParameter([50, 60, 70], default=buy_params['macd_slow_period'], space="buy")
+    macd_signal = CategoricalParameter([10, 18, 22], default=buy_params['macd_signal'], space="buy")
+    macd_histogram_index_name = ''
+
     # Custom Sell Profit (formerly Dynamic ROI)
     cexit_roi_type = CategoricalParameter(['static', 'decay', 'step'], default=sell_params['cexit_roi_type'], space='sell', load=True,
                                           optimize=True)
@@ -153,7 +183,7 @@ class SSLChannelHyperOpt(IStrategy):
                                                       optimize=True)
 
     # Custom Stoploss
-    cstop_loss_threshold = DecimalParameter(-0.05, -0.01, default=sell_params['cstop_loss_threshold'], space='sell', load=True, optimize=True)
+    cstop_loss_threshold = DecimalParameter(-0.15, -0.01, default=sell_params['cstop_loss_threshold'], space='sell', load=True, optimize=True)
     cstop_bail_how = CategoricalParameter(['roc', 'time', 'any', 'none'], default=sell_params['cstop_bail_how'], space='sell', load=True,
                                           optimize=True)
     cstop_bail_roc = DecimalParameter(-5.0, -1.0, default=-sell_params['cstop_bail_roc'], space='sell', load=True, optimize=True)
@@ -165,6 +195,14 @@ class SSLChannelHyperOpt(IStrategy):
     use_1d_cross = CategoricalParameter([True, False], default=buy_params['use_1d_cross'], space='buy', optimize=True)
     use_1h_cross = CategoricalParameter([True, False], default=buy_params['use_1h_cross'], space='buy', optimize=True)
     use_low_profit = CategoricalParameter([True, False], default=buy_params['use_low_profit'], space='buy', optimize=True)
+    use_1d_guard = CategoricalParameter([True, False], default=buy_params['use_1d_guard'], space='buy', optimize=True)
+    use_1h_guard = CategoricalParameter([True, False], default=buy_params['use_1h_guard'], space='buy', optimize=True)
+
+    use_stoc_trigger = CategoricalParameter([True, False], default=buy_params['use_stoc_trigger'], space='buy')
+    use_bb_trigger = CategoricalParameter([True, False], default=buy_params['use_bb_trigger'], space='buy')
+    use_coral_color_change_as_trigger = CategoricalParameter([True, False], default=buy_params['use_coral_color_change_as_trigger'], space='buy')
+    use_sar_ema_cross = CategoricalParameter([True, False], default=buy_params['use_sar_ema_cross'], space='buy')
+    use_macd_crossover = CategoricalParameter([True, False], default=buy_params['use_macd_crossover'], space='buy')
 
     ssl_channel_down_index_pattern = 'ssl_channel_down_{0}'
     ssl_channel_up_index_pattern = 'ssl_channel_up_{0}'
@@ -175,10 +213,10 @@ class SSLChannelHyperOpt(IStrategy):
     # --------------------------------
 
     # --------------------------------
-    # buy_coral_sm =  CategoricalParameter([14, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
+    buy_coral_sm =  CategoricalParameter([14, 21], default=buy_params['buy_coral_sm'], space='buy') # 21
     # use_coral = CategoricalParameter([True, False], default=buy_params['use_coral'], space='buy') # True
-    # buy_coral_cd = 0.9
-    # buy_coral_index_name = ''
+    buy_coral_cd = 0.9
+    buy_coral_index_name = ''
     # --------------------------------
 
     buy_leverage = IntParameter(1, 20, default=1, space='buy')
@@ -205,6 +243,23 @@ class SSLChannelHyperOpt(IStrategy):
     # Define a custom stoploss space.
     # def stoploss_space():
     #     return [SKDecimal(-0.02, -0.01, decimals=3, name='stoploss')]
+
+    def leverage(self, pair: str, current_time: datetime, current_rate: float,
+                 proposed_leverage: float, max_leverage: float, entry_tag: Optional[str], side: str,
+                 **kwargs) -> float:
+        """
+        Customize leverage for each new trade. This method is only called in futures mode.
+
+        :param pair: Pair that's currently analyzed
+        :param current_time: datetime object, containing the current datetime
+        :param current_rate: Rate, calculated based on pricing settings in exit_pricing.
+        :param proposed_leverage: A leverage proposed by the bot.
+        :param max_leverage: Max leverage allowed on this pair
+        :param entry_tag: Optional entry_tag (buy_tag) if provided with the buy signal.
+        :param side: 'long' or 'short' - indicating the direction of the proposed trade
+        :return: A leverage amount, which is between 1.0 and max_leverage.
+        """
+        return 1
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:
@@ -371,6 +426,16 @@ class SSLChannelHyperOpt(IStrategy):
 
         # ###################### End Coral Trend Indicator ################################
 
+        dataframe = self.populate_parabolic_sar(dataframe, metadata)
+        dataframe = self.populate_macd(dataframe, metadata)
+        dataframe = self.populate_coral_trend(dataframe)
+        # dataframe = self.populate_pmax(dataframe, metadata)
+
+        # EMA - Exponential Moving Average
+        dataframe['ohlc4'] = (dataframe['open'] + dataframe['high'] + dataframe['low'] + dataframe['close']) / 4.0
+        dataframe['ema3'] = ta.EMA(dataframe['ohlc4'], timeperiod=3)
+        dataframe['ema21'] = ta.EMA(dataframe['ohlc4'], timeperiod=21)
+
         # populate SSL Channel
         for ssl in self.buy_small_ssl_length.range:
             # if self.ssl_channel_down_index_pattern.format(ssl) not in dataframe.columns:
@@ -429,46 +494,119 @@ class SSLChannelHyperOpt(IStrategy):
         self.buy_small_ssl_channel_up_index_name = self.ssl_channel_up_index_pattern.format(self.buy_small_ssl_length.value)
         self.sell_ssl_channel_down_index_name = self.ssl_channel_down_index_pattern.format(self.sell_ssl_length.value)
         self.sell_ssl_channel_up_index_name = self.ssl_channel_up_index_pattern.format(self.sell_ssl_length.value)
-        # self.buy_coral_index_name = f'coral_{self.buy_coral_sm.value}_{self.buy_coral_cd}'
+        self.sar_index_name = f'sar_{self.sar_accelaretion.value}_{self.sar_maximum.value}'
+        self.macd_histogram_index_name = f'macdhist_{self.macd_fast_period.value}_{self.macd_slow_period.value}_{self.macd_signal.value}'
+        self.buy_coral_index_name = f'coral_{self.buy_coral_sm.value}_{self.buy_coral_cd}'
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.init_index_names()
 
-        long_condition = []
+        dataframe = self.long_entry_condition(dataframe, metadata)
 
+        dataframe = self.short_entry_condition(dataframe, metadata)
+
+        return dataframe
+
+    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        self.init_index_names()
+
+        # long_conditions = []
+        # long_conditions.append(
+        #         dataframe['close'] > dataframe['bb_upperband']
+        #     )
+
+        # # Check that volume is not 0
+        # long_conditions.append(dataframe['volume'] > 0)
+
+        # if long_conditions:
+        #     dataframe.loc[
+        #         reduce(lambda x, y: x & y, long_conditions),
+        #         'exit_long'] = 1
+
+        # short_conditions = []
+        # short_conditions.append(
+        #         dataframe['close'] > dataframe['bb_lowerband']
+        #     )
+
+        # # Check that volume is not 0
+        # short_conditions.append(dataframe['volume'] > 0)
+
+        # if short_conditions:
+        #     dataframe.loc[
+        #         reduce(lambda x, y: x & y, short_conditions),
+        #         'exit_long'] = 1
+        return dataframe
+    
+    def long_entry_condition(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # if self.use_coral.value:
         #     long_condition.append((dataframe[self.buy_coral_index_name] < dataframe['close']))
-        
+        long_condition = []
+
         if self.use_1d_cross.value:
             long_condition.append((dataframe['crossabove_1d'] == True))
         
         if self.use_1h_cross.value:
             long_condition.append((dataframe['crossabove_1h'] == True))
         
-        long_condition.append(
-            ( 
-                (dataframe['volume'] > 0) &
-                (dataframe[f'fastd_1d'] < dataframe[f'fastk_1d']) &
+        if self.use_1d_guard.value:
+            long_condition.append(
+                (dataframe[f'fastd_1d'] < dataframe[f'fastk_1d'])
+            )
+
+        if self.use_macd_as_guard.value == True:
+            long_condition.append(dataframe[self.macd_histogram_index_name] > 0)
+        
+        if self.use_sar_as_guard.value == True:
+            long_condition.append(dataframe[self.sar_index_name] < dataframe['close'])
+        
+        if self.use_1h_guard.value:
+            long_condition.append(
                 (dataframe[f'fastd_1h'] < dataframe[f'fastk_1h']) &
                 (dataframe['close'] <= dataframe['bb_upperband_1h']) &
-                (dataframe['close'] > dataframe['bb_middleband_1h'])
-            ) &
-            (
                 (dataframe[f'fastd_{self.inf_timeframe}'] < dataframe[f'fastk_{self.inf_timeframe}'])
-                # (dataframe['crossabove_1h'] == True)
+            )
+        
+        long_condition.append(
+            ( 
+                (dataframe['volume'] > 0)
             )
         )
-        long_condition.append(
-            # self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
-                (dataframe['close'] > dataframe['bb_lowerband']) &
-                (dataframe['low'].shift(1) < dataframe['bb_lowerband'].shift(1))
+
+        if self.use_bb_trigger.value:
+            long_condition.append(
+                # self.ssl_cross_above(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
+                    (dataframe['close'] > dataframe['bb_middleband']) &
+                    (dataframe['low'].shift(1) < dataframe['bb_middleband'].shift(1))
+                )
+        
+        if self.use_stoc_trigger:
+            long_condition.append(
+                (dataframe['fastk'] < 30) &
+                (qtpylib.crossed_above(dataframe['fastk'], dataframe['fastd']))
+            )
+        
+        if self.use_coral_color_change_as_trigger.value:
+            long_condition.append(
+                self.green_from_red(dataframe[self.buy_coral_index_name])
+            )
+
+        if self.use_sar_ema_cross.value:
+            long_condition.append (
+                qtpylib.crossed_above(dataframe['ema3'], dataframe[self.sar_index_name])
+            )
+            
+        if self.use_macd_crossover.value:
+            long_condition.append(
+                qtpylib.crossed_above(dataframe['ema3'], dataframe[self.macd_histogram_index_name])
             )
 
         if long_condition:
                 dataframe.loc[
                     reduce(lambda x, y: x & y, long_condition),
                     'enter_long'] = 1
-        
+        return dataframe
+    
+    def short_entry_condition(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         short_condition = []
 
         # GUARDS AND TRENDS
@@ -479,63 +617,64 @@ class SSLChannelHyperOpt(IStrategy):
             short_condition.append((dataframe['crossbelow_1d'] == True))
         
         if self.use_1h_cross.value:
-            long_condition.append((dataframe['crossbelow_1h'] == True))
+            short_condition.append((dataframe['crossbelow_1h'] == True))
 
+        if self.use_1d_guard.value:
+            short_condition.append(
+                (dataframe[f'fastd_1d'] < dataframe[f'fastk_1d'])
+            )
+
+        if self.use_macd_as_guard.value == True:
+            short_condition.append(dataframe[self.macd_histogram_index_name] < 0)
+
+        if self.use_1h_guard.value:
+            short_condition.append(
+                (dataframe[f'fastd_1h'] < dataframe[f'fastk_1h']) &
+                (dataframe['close'] <= dataframe['bb_upperband_1h']) &
+                (dataframe[f'fastd_{self.inf_timeframe}'] < dataframe[f'fastk_{self.inf_timeframe}'])
+            )
+        
         short_condition.append(
             ( 
-                (dataframe['volume'] > 0) &
-                (dataframe[f'fastd_1d'] > dataframe[f'fastk_1d']) &
-                (dataframe[f'fastd_1h'] > dataframe[f'fastk_1h']) &
-                (dataframe['close'] >= dataframe['bb_lowerband_1h']) &
-                (dataframe['close'] < dataframe['bb_middleband_1h'])
-            ) &
-            (
-                (dataframe[f'fastd_{self.inf_timeframe}'] > dataframe[f'fastk_{self.inf_timeframe}'])
+                (dataframe['volume'] > 0)
             )
         )
-        short_condition.append(
-                # self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
-                (dataframe['close'] > dataframe['bb_upperband']) &
-                (dataframe['high'].shift(1) > dataframe['bb_upperband'].shift(1))
+
+        if self.use_bb_trigger.value:
+            short_condition.append(
+                    # self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
+                    (dataframe['close'] > dataframe['bb_middleband']) &
+                    (dataframe['high'].shift(1) > dataframe['bb_middleband'].shift(1))
+                )
+        
+        if self.use_stoc_trigger.value:
+            short_condition.append(
+                (dataframe['fastk'] > 70) &
+                (qtpylib.crossed_below(dataframe['fastk'], dataframe['fastd']))
+            )
+
+        if self.use_coral_color_change_as_trigger.value:
+            short_condition.append(
+                self.red_from_green(dataframe[self.buy_coral_index_name])
+            )
+
+        if self.use_sar_ema_cross.value:
+            short_condition.append (
+                qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sar_index_name])
+            )
+            
+        if self.use_macd_crossover.value:
+            short_condition.append(
+                qtpylib.crossed_below(dataframe['ema3'], dataframe[self.macd_histogram_index_name])
             )
         
         if short_condition:
                 dataframe.loc[
                     reduce(lambda x, y: x & y, short_condition),
                     'enter_short'] = 1
-
+        
         return dataframe
 
-    def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        self.init_index_names()
-
-        long_conditions = []
-        long_conditions.append(
-                dataframe['close'] > dataframe['bb_upperband']
-            )
-
-        # Check that volume is not 0
-        long_conditions.append(dataframe['volume'] > 0)
-
-        if long_conditions:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, long_conditions),
-                'exit_long'] = 1
-
-        short_conditions = []
-        short_conditions.append(
-                dataframe['close'] > dataframe['bb_lowerband']
-            )
-
-        # Check that volume is not 0
-        short_conditions.append(dataframe['volume'] > 0)
-
-        if short_conditions:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, short_conditions),
-                'exit_long'] = 1
-        return dataframe
-    
     def ssl_cross_above(self, dataframe: DataFrame, up_index_name: str, down_index_name: str) -> bool:
         return qtpylib.crossed_above(dataframe[up_index_name], dataframe[down_index_name])
     
@@ -549,6 +688,68 @@ class SSLChannelHyperOpt(IStrategy):
         print ('Coral Trend Indicator Loaded')
 
         return dataframe
+
+    def populate_parabolic_sar(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Parabolic SAR
+        print ('Parabolic SAR Loading')
+        for accelaretion in self.sar_accelaretion.range:
+            for maximum in self.sar_maximum.range:
+                afstep = 0.03
+                aflimit = 0.03
+                epstep = 0.03
+                eplimit = 0.3
+                name = f'sar_{accelaretion}_{maximum}'
+                print("Printing: " + name)
+                temp = ta.SAR(dataframe['high'], dataframe['low'], acceleration=accelaretion, maximum=maximum,
+                                        afstep=afstep, aflimit=aflimit, epstep=epstep, eplimit=eplimit)
+                dataframe[name] = temp
+                print('Done')
+        
+        print ('Parabolic SAR Loaded')
+
+        return dataframe
+    
+    def populate_macd(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        print ('Loading MACD')
+        # MACD        
+        for fast in self.macd_fast_period.range:
+            for slow in self.macd_slow_period.range:
+                for signal in self.macd_signal.range:
+                    macd = ta.MACD(dataframe, fastperiod=fast, slowperiod=slow, signalperiod=signal)
+                    macd.rename(columns = {'macd' : f'macd_{fast}_{slow}_{signal}'}, inplace = True)
+                    macd.rename(columns = {'macdsignal' : f'macdsignal_{fast}_{slow}_{signal}'}, inplace = True)
+                    macd.rename(columns = {'macdhist' : f'macdhist_{fast}_{slow}_{signal}'}, inplace = True)
+                    dataframe = pd.concat([dataframe, macd], axis=1, join="inner")
+
+        print ('MACD Loaded')
+
+        return dataframe
+    
+    def populate_pmax(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # PMAX
+        print ('Profit Maximizer Loading')
+
+        pmax_MAtype = self.pmax_parameters["MAtype"]
+        for period in self.pmax_period.range:
+            for multiplier in self.pmax_multiplier.range:
+                for length in self.pmax_length.range:
+                    dataframe = PMAX(dataframe, period=period, multiplier=multiplier, length=length, MAtype=pmax_MAtype)
+
+        print('Profit Maximizer Loaded')
+
+        return dataframe
+    
+    def is_green(self, dataframe_1d) -> bool:
+        return np.greater(dataframe_1d, dataframe_1d.shift(1))
+
+    def is_red(self, dataframe_1d) -> bool:
+        return np.less(dataframe_1d, dataframe_1d.shift(1))
+
+    def green_from_red(self, dataframe_1d) -> bool:
+        return self.is_red(dataframe_1d.shift(1)) & self.is_green(dataframe_1d)
+
+    def red_from_green(self, dataframe_1d) -> bool:
+        return self.is_green(dataframe_1d.shift(1)) & self.is_red(dataframe_1d)
 
 def coral_trend(dataframe: DataFrame, sm: int, cd: int) -> DataFrame:
     di = (sm - 1.0) / 2.0 + 1.0
