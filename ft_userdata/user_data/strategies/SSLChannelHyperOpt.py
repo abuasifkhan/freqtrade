@@ -230,7 +230,7 @@ class SSLChannelHyperOpt(IStrategy):
     ignore_roi_if_entry_signal = shouldIgnoreRoi.value
 
     # Number of candles the strategy requires before producing valid signals
-    startup_candle_count: int = 10
+    startup_candle_count: int = 200
 
     use_custom_stoploss = shouldUseStopLoss.value
     profit_trigger = CategoricalParameter([0.002, 0.003, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=sell_params['profit_trigger'], space='sell')
@@ -370,7 +370,21 @@ class SSLChannelHyperOpt(IStrategy):
                             ("BTC/USDT", "15m"),
                             ]
         """
-        return []
+
+#-------------------- ADDED FOR INFORMATIVE PAIRS -------------------------------#
+
+        # get access to all pairs available in whitelist.
+        pairs = self.dp.current_whitelist()
+        # Assign tf to each pair so they can be downloaded and cached for strategy.
+        informative_pairs = [(pair, '1d') for pair in pairs]
+        informative_pairs = [(pair, '1h') for pair in pairs]
+        # Optionally Add additional "static" pairs
+        informative_pairs += [
+                              ("BTC/USDT", "1d"),
+                              ("BTC/USDT", "1h"),
+                            ]
+
+        return informative_pairs
     
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         # RMI: https://www.tradingview.com/script/kwIt9OgQ-Relative-Momentum-Index/
