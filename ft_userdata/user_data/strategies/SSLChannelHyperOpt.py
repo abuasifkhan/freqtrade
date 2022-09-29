@@ -56,64 +56,64 @@ class SSLChannelHyperOpt(IStrategy):
     # Buy hyperspace params:
     buy_params = {
         "buy_coral_sm": 21,
-        "buy_small_ssl_length": 5,
-        "macd_fast_period": 10,
-        "macd_signal": 18,
-        "macd_slow_period": 70,
+        "buy_small_ssl_length": 10,
+        "macd_fast_period": 20,
+        "macd_signal": 22,
+        "macd_slow_period": 60,
         "sar_accelaretion": 0.08,
         "sar_maximum": 0.1,
         "shouldIgnoreRoi": False,
         "shouldUseStopLoss": True,
-        "should_exit_profit_only": True,
-        "should_use_exit_signal": True,
-        "use_1d_cross": False,
+        "should_exit_profit_only": False,
+        "should_use_exit_signal": False,
+        "use_1d_cross": True,
         "use_1d_guard": True,
-        "use_1h_cross": False,
+        "use_1h_cross": True,
         "use_1h_guard": True,
-        "use_bb_trigger": True,
+        "use_bb_trigger": False,
         "use_coral_color_change_as_trigger": False,
         "use_low_profit": False,
         "use_macd_as_guard": True,
         "use_macd_crossover": False,
         "use_sar_as_guard": False,
-        "use_sar_ema_cross": True,
-        "use_stoc_trigger": False,
+        "use_sar_ema_cross": False,
+        "use_stoc_trigger": True,
     }
 
     # Sell hyperspace params:
     sell_params = {
         "cexit_endtrend_respect_roi": True,
-        "cexit_pullback": True,
-        "cexit_pullback_amount": 0.022,
+        "cexit_pullback": False,
+        "cexit_pullback_amount": 0.02,
         "cexit_pullback_respect_roi": False,
         "cexit_roi_end": 0.001,
-        "cexit_roi_start": 0.041,
-        "cexit_roi_time": 1288,
+        "cexit_roi_start": 0.018,
+        "cexit_roi_time": 1404,
         "cexit_roi_type": "step",
-        "cexit_trend_type": "rmi",
-        "cstop_bail_how": "any",
-        "cstop_bail_roc": -3.398,
-        "cstop_bail_time": 747,
-        "cstop_bail_time_trend": False,
-        "cstop_loss_threshold": -0.109,
-        "cstop_max_stoploss": -0.097,
-        "maximum_stoploss": 0.8,
-        "minimum_stoploss": 0.9,
-        "minimum_take_profit": 0.1,
-        "profit_trigger": 0.09,
-        "sell_ssl_length": 200,
+        "cexit_trend_type": "candle",
+        "cstop_bail_how": "time",
+        "cstop_bail_roc": -3.075,
+        "cstop_bail_time": 408,
+        "cstop_bail_time_trend": True,
+        "cstop_loss_threshold": -0.104,
+        "cstop_max_stoploss": -0.044,
+        "maximum_stoploss": 0.3,
+        "minimum_stoploss": 0.2,
+        "minimum_take_profit": 0.0075,
+        "profit_trigger": 0.1,
+        "sell_ssl_length": 50,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.117,
-        "15": 0.071,
-        "53": 0.015,
-        "160": 0
+        "0": 0.234,
+        "22": 0.05,
+        "54": 0.012,
+        "114": 0
     }
 
     # Stoploss:
-    stoploss = -0.114
+    stoploss = -0.1
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
