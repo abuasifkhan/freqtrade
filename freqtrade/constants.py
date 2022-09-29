@@ -36,7 +36,8 @@ AVAILABLE_PAIRLISTS = ['StaticPairList', 'VolumePairList',
                        'PrecisionFilter', 'PriceFilter', 'RangeStabilityFilter',
                        'ShuffleFilter', 'SpreadFilter', 'VolatilityFilter']
 AVAILABLE_PROTECTIONS = ['CooldownPeriod', 'LowProfitPairs', 'MaxDrawdown', 'StoplossGuard']
-AVAILABLE_DATAHANDLERS = ['json', 'jsongz', 'hdf5']
+AVAILABLE_DATAHANDLERS_TRADES = ['json', 'jsongz', 'hdf5']
+AVAILABLE_DATAHANDLERS = AVAILABLE_DATAHANDLERS_TRADES + ['feather', 'parquet']
 BACKTEST_BREAKDOWNS = ['day', 'week', 'month']
 BACKTEST_CACHE_AGE = ['none', 'day', 'week', 'month']
 BACKTEST_CACHE_DEFAULT = 'day'
@@ -434,7 +435,7 @@ CONF_SCHEMA = {
         },
         'dataformat_trades': {
             'type': 'string',
-            'enum': AVAILABLE_DATAHANDLERS,
+            'enum': AVAILABLE_DATAHANDLERS_TRADES,
             'default': 'jsongz'
         },
         'position_adjustment_enable': {'type': 'boolean'},
@@ -551,7 +552,7 @@ CONF_SCHEMA = {
                         "weight_factor": {"type": "number", "default": 0},
                         "principal_component_analysis": {"type": "boolean", "default": False},
                         "use_SVM_to_remove_outliers": {"type": "boolean", "default": False},
-                        "plot_feature_importance": {"type": "boolean", "default": False},
+                        "plot_feature_importances": {"type": "integer", "default": 0},
                         "svm_params": {"type": "object",
                                        "properties": {
                                            "shuffle": {"type": "boolean", "default": False},
