@@ -55,65 +55,68 @@ class SSLChannelHyperOpt(IStrategy):
 
     # Buy hyperspace params:
     buy_params = {
-        "buy_coral_sm": 21,
+        "buy_coral_sm": 14,
         "buy_small_ssl_length": 10,
         "macd_fast_period": 20,
         "macd_signal": 22,
         "macd_slow_period": 60,
-        "sar_accelaretion": 0.08,
-        "sar_maximum": 0.1,
-        "shouldIgnoreRoi": False,
-        "shouldUseStopLoss": True,
+        "sar_accelaretion": 0.02,
+        "sar_maximum": 0.2,
+        "shouldIgnoreRoi": True,
+        "shouldUseStopLoss": False,
         "should_exit_profit_only": False,
-        "should_use_exit_signal": False,
-        "use_1d_cross": True,
-        "use_1d_guard": True,
+        "should_use_exit_signal": True,
+        "use_1d_cross": False,
+        "use_1d_guard": False,
         "use_1h_cross": True,
-        "use_1h_guard": True,
-        "use_bb_trigger": False,
+        "use_1h_guard": False,
+        "use_bb_trigger": True,
         "use_coral_color_change_as_trigger": False,
         "use_low_profit": False,
         "use_macd_as_guard": True,
         "use_macd_crossover": False,
-        "use_sar_as_guard": False,
-        "use_sar_ema_cross": False,
+        "use_sar_as_guard": True,
+        "use_sar_ema_cross": True,
         "use_stoc_trigger": True,
     }
 
     # Sell hyperspace params:
     sell_params = {
-        "cexit_endtrend_respect_roi": True,
-        "cexit_pullback": False,
-        "cexit_pullback_amount": 0.02,
-        "cexit_pullback_respect_roi": False,
-        "cexit_roi_end": 0.001,
-        "cexit_roi_start": 0.018,
-        "cexit_roi_time": 1404,
+        "cexit_endtrend_respect_roi": False,
+        "cexit_pullback": True,
+        "cexit_pullback_amount": 0.028,
+        "cexit_pullback_respect_roi": True,
+        "cexit_roi_end": 0.006,
+        "cexit_roi_start": 0.015,
+        "cexit_roi_time": 1095,
         "cexit_roi_type": "step",
-        "cexit_trend_type": "candle",
-        "cstop_bail_how": "time",
-        "cstop_bail_roc": -3.075,
-        "cstop_bail_time": 408,
+        "cexit_trend_type": "none",
+        "cstop_bail_how": "none",
+        "cstop_bail_roc": -1.182,
+        "cstop_bail_time": 964,
         "cstop_bail_time_trend": True,
-        "cstop_loss_threshold": -0.104,
-        "cstop_max_stoploss": -0.044,
-        "maximum_stoploss": 0.3,
-        "minimum_stoploss": 0.2,
-        "minimum_take_profit": 0.0075,
-        "profit_trigger": 0.1,
-        "sell_ssl_length": 50,
+        "cstop_loss_threshold": -0.04,
+        "cstop_max_stoploss": -0.13,
+        "maximum_stoploss": 0.6,
+        "minimum_stoploss": 0.25,
+        "minimum_take_profit": 0.99,
+        "profit_trigger": 0.002,
+        "sell_ssl_length": 200,
+        "sell_use_1d_cross": True,
+        "sell_use_1h_cross": False,
+        "sell_use_bb_trigger": True,
     }
 
     # ROI table:
     minimal_roi = {
-        "0": 0.234,
-        "22": 0.05,
-        "54": 0.012,
-        "114": 0
+        "0": 0.087,
+        "16": 0.032,
+        "51": 0.011,
+        "72": 0
     }
 
     # Stoploss:
-    stoploss = -0.1
+    stoploss = -0.077
 
     # Trailing stop:
     trailing_stop = False  # value loaded from strategy
@@ -202,6 +205,10 @@ class SSLChannelHyperOpt(IStrategy):
     use_sar_ema_cross = CategoricalParameter([True, False], default=buy_params['use_sar_ema_cross'], space='buy')
     use_macd_crossover = CategoricalParameter([True, False], default=buy_params['use_macd_crossover'], space='buy')
 
+    sell_use_bb_trigger = CategoricalParameter([True, False], default=sell_params['sell_use_bb_trigger'], space='sell')
+    sell_use_1d_cross = CategoricalParameter([True, False], default=sell_params['sell_use_1d_cross'], space='sell')
+    sell_use_1h_cross = CategoricalParameter([True, False], default=sell_params['sell_use_1h_cross'], space='sell')
+
     ssl_channel_down_index_pattern = 'ssl_channel_down_{0}'
     ssl_channel_up_index_pattern = 'ssl_channel_up_{0}'
     buy_small_ssl_channel_down_index_name = ''
@@ -257,7 +264,7 @@ class SSLChannelHyperOpt(IStrategy):
         :param side: 'long' or 'short' - indicating the direction of the proposed trade
         :return: A leverage amount, which is between 1.0 and max_leverage.
         """
-        return 1
+        return 5
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:
@@ -522,31 +529,48 @@ class SSLChannelHyperOpt(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.init_index_names()
 
-        # long_conditions = []
-        # long_conditions.append(
-        #         dataframe['close'] > dataframe['bb_upperband']
-        #     )
+        long_conditions = []
+
+        if self.sell_use_1d_cross.value:
+            long_conditions.append((dataframe['crossbelow_1d'] == True))
+        
+        if self.sell_use_1h_cross.value:
+            long_conditions.append(dataframe['crossbelow_1h'] == True)
+
+        if self.sell_use_bb_trigger.value:
+            long_conditions.append(
+                    dataframe['ema3'] > dataframe['bb_upperband_1h']
+                )
 
         # # Check that volume is not 0
-        # long_conditions.append(dataframe['volume'] > 0)
+        long_conditions.append(dataframe['volume'] > 0)
 
-        # if long_conditions:
-        #     dataframe.loc[
-        #         reduce(lambda x, y: x & y, long_conditions),
-        #         'exit_long'] = 1
+        if long_conditions:
+            dataframe.loc[
+                reduce(lambda x, y: x & y, long_conditions),
+                'exit_long'] = 1
 
-        # short_conditions = []
-        # short_conditions.append(
-        #         dataframe['close'] > dataframe['bb_lowerband']
-        #     )
+        short_conditions = []
+
+        if self.sell_use_1d_cross.value:
+            short_conditions.append((dataframe['crossabove_1d'] == True))
+        
+        if self.sell_use_1h_cross.value:
+            long_conditions.append(dataframe['crossabove_1h'] == True)
+
+        if self.sell_use_bb_trigger.value:
+            short_conditions.append(
+                    dataframe['ema3'] < dataframe['bb_upperband_1h']
+                )
 
         # # Check that volume is not 0
-        # short_conditions.append(dataframe['volume'] > 0)
+        short_conditions.append(dataframe['volume'] > 0)
 
-        # if short_conditions:
-        #     dataframe.loc[
-        #         reduce(lambda x, y: x & y, short_conditions),
-        #         'exit_long'] = 1
+        if short_conditions:
+            dataframe.loc[
+                reduce(lambda x, y: x & y, short_conditions),
+                'exit_long'] = 1
+
         return dataframe
     
     def long_entry_condition(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
@@ -573,8 +597,8 @@ class SSLChannelHyperOpt(IStrategy):
         
         if self.use_1h_guard.value:
             long_condition.append(
-                (dataframe[f'fastd_1h'] < dataframe[f'fastk_1h']) &
-                (dataframe['close'] <= dataframe['bb_upperband_1h']) &
+                # (dataframe[f'fastd_1h'] < dataframe[f'fastk_1h']) &
+                # (dataframe['close'] <= dataframe['bb_upperband_1h']) &
                 (dataframe[f'fastd_{self.inf_timeframe}'] < dataframe[f'fastk_{self.inf_timeframe}'])
             )
         
@@ -593,7 +617,6 @@ class SSLChannelHyperOpt(IStrategy):
         
         if self.use_stoc_trigger:
             long_condition.append(
-                (dataframe['fastk'] < 30) &
                 (qtpylib.crossed_above(dataframe['fastk'], dataframe['fastd']))
             )
         
@@ -625,65 +648,65 @@ class SSLChannelHyperOpt(IStrategy):
         # if self.use_coral.value:
         #     short_condition.append((dataframe[self.buy_coral_index_name] > dataframe['close']))
         
-        if self.use_1d_cross.value:
-            short_condition.append((dataframe['crossbelow_1d'] == True))
+        # if self.use_1d_cross.value:
+        #     short_condition.append((dataframe['crossbelow_1d'] == True))
         
-        if self.use_1h_cross.value:
-            short_condition.append((dataframe['crossbelow_1h'] == True))
+        # if self.use_1h_cross.value:
+        #     short_condition.append((dataframe['crossbelow_1h'] == True))
 
-        if self.use_1d_guard.value:
-            short_condition.append(
-                (dataframe[f'fastd_1d'] < dataframe[f'fastk_1d'])
-            )
+        # if self.use_1d_guard.value:
+        #     short_condition.append(
+        #         (dataframe[f'fastd_1d'] > dataframe[f'fastk_1d'])
+        #     )
 
-        if self.use_macd_as_guard.value == True:
-            short_condition.append(dataframe[self.macd_histogram_index_name] < 0)
-
-        if self.use_1h_guard.value:
-            short_condition.append(
-                (dataframe[f'fastd_1h'] < dataframe[f'fastk_1h']) &
-                (dataframe['close'] <= dataframe['bb_upperband_1h']) &
-                (dataframe[f'fastd_{self.inf_timeframe}'] < dataframe[f'fastk_{self.inf_timeframe}'])
-            )
+        # if self.use_macd_as_guard.value == True:
+        #     short_condition.append(dataframe[self.macd_histogram_index_name] < 0)
         
-        short_condition.append(
-            ( 
-                (dataframe['volume'] > 0)
-            )
-        )
+        # if self.use_sar_as_guard.value == True:
+        #     short_condition.append(dataframe[self.sar_index_name] > dataframe['close'])
 
-        if self.use_bb_trigger.value:
-            short_condition.append(
-                    # self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
-                    (dataframe['close'] > dataframe['bb_middleband']) &
-                    (dataframe['high'].shift(1) > dataframe['bb_middleband'].shift(1))
-                )
+        # if self.use_1h_guard.value:
+        #     short_condition.append(
+        #         (dataframe[f'fastd_1h'] > dataframe[f'fastk_1h'])
+        #     )
         
-        if self.use_stoc_trigger.value:
-            short_condition.append(
-                (dataframe['fastk'] > 70) &
-                (qtpylib.crossed_below(dataframe['fastk'], dataframe['fastd']))
-            )
+        # short_condition.append(
+        #     ( 
+        #         (dataframe['volume'] > 0)
+        #     )
+        # )
 
-        if self.use_coral_color_change_as_trigger.value:
-            short_condition.append(
-                self.red_from_green(dataframe[self.buy_coral_index_name])
-            )
+        # if self.use_bb_trigger.value:
+        #     short_condition.append(
+        #             # self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
+        #             (dataframe['close'] > dataframe['bb_middleband']) &
+        #             (dataframe['high'].shift(1) > dataframe['bb_middleband'].shift(1))
+        #         )
+        
+        # if self.use_stoc_trigger.value:
+        #     short_condition.append(
+        #         (qtpylib.crossed_below(dataframe['fastk'], dataframe['fastd']))
+        #     )
 
-        if self.use_sar_ema_cross.value:
-            short_condition.append (
-                qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sar_index_name])
-            )
+        # if self.use_coral_color_change_as_trigger.value:
+        #     short_condition.append(
+        #         self.red_from_green(dataframe[self.buy_coral_index_name])
+        #     )
+
+        # if self.use_sar_ema_cross.value:
+        #     short_condition.append (
+        #         qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sar_index_name])
+        #     )
             
-        if self.use_macd_crossover.value:
-            short_condition.append(
-                qtpylib.crossed_below(dataframe['ema3'], dataframe[self.macd_histogram_index_name])
-            )
+        # if self.use_macd_crossover.value:
+        #     short_condition.append(
+        #         qtpylib.crossed_below(dataframe['ema3'], dataframe[self.macd_histogram_index_name])
+        #     )
         
-        if short_condition:
-                dataframe.loc[
-                    reduce(lambda x, y: x & y, short_condition),
-                    'enter_short'] = 1
+        # if short_condition:
+        #         dataframe.loc[
+        #             reduce(lambda x, y: x & y, short_condition),
+        #             'enter_short'] = 1
         
         return dataframe
 
