@@ -5,6 +5,8 @@ import talib.abstract as ta
 import freqtrade.vendor.qtpylib.indicators as qtpylib
 import arrow
 
+from kalmanfilter import KalmanFilter
+
 from freqtrade.strategy import (IStrategy, merge_informative_pair, stoploss_from_open,
                                 IntParameter, DecimalParameter, CategoricalParameter)
 
@@ -34,7 +36,10 @@ warnings.simplefilter(action='ignore', category=pd.errors.PerformanceWarning)
 
 import custom_indicators as cta
 
-from  simdkalman import KalmanFilter
+# from simdkalman import KalmanFilter
+import sys
+    # caution: path[0] is reserved for script path (or '' in REPL)
+
 import scipy
 
 
