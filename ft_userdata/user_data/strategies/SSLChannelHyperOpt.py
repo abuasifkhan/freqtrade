@@ -15,6 +15,7 @@ from pandas import DataFrame
 from freqtrade.persistence import Trade
 from functools import reduce
 import datetime
+from kalmanfilter import KalmanFilter
 # from coral_trend import *
 from technical.indicators.indicators import *
 import custom_indicators as cta
@@ -26,6 +27,7 @@ from freqtrade.strategy import (BooleanParameter, CategoricalParameter, DecimalP
 # Add your lib to import here
 import talib.abstract as ta
 import freqtrade.vendor.qtpylib.indicators as qtpylib
+import scipy
 
 
 # This class is a sample. Feel free to customize it.
@@ -62,7 +64,6 @@ class SSLChannelHyperOpt(IStrategy):
         "macd_slow_period": 60,
         "sar_accelaretion": 0.02,
         "sar_maximum": 0.2,
-        "shouldIgnoreRoi": True,
         "shouldUseStopLoss": False,
         "should_exit_profit_only": False,
         "should_use_exit_signal": True,
@@ -149,8 +150,8 @@ class SSLChannelHyperOpt(IStrategy):
         'exit': 'gtc'
     }
 
-    shouldIgnoreRoi = BooleanParameter(default=buy_params['shouldIgnoreRoi'], space='buy')
-    shouldUseStopLoss = BooleanParameter(default=buy_params['shouldUseStopLoss'], space='buy')
+    # Number of candles the strategy requires before producing valid signals
+    startup_candle_count: int = 256
 
     # --------------------------------
     buy_small_ssl_length = CategoricalParameter([5, 10], default=buy_params['buy_small_ssl_length'], space='buy', optimize=True)
@@ -205,9 +206,19 @@ class SSLChannelHyperOpt(IStrategy):
     use_sar_ema_cross = CategoricalParameter([True, False], default=buy_params['use_sar_ema_cross'], space='buy')
     use_macd_crossover = CategoricalParameter([True, False], default=buy_params['use_macd_crossover'], space='buy')
 
-    sell_use_bb_trigger = CategoricalParameter([True, False], default=sell_params['sell_use_bb_trigger'], space='sell')
-    sell_use_1d_cross = CategoricalParameter([True, False], default=sell_params['sell_use_1d_cross'], space='sell')
-    sell_use_1h_cross = CategoricalParameter([True, False], default=sell_params['sell_use_1h_cross'], space='sell')
+    kf_window = startup_candle_count
+    filter_list = {}
+    filter_init_list = {}
+
+    kalman_filter = KalmanFilter(
+                state_transition=1.0,
+                process_noise=2.0,
+                observation_model=1.0,
+                observation_noise=0.5
+            )
+    current_pair = ""
+    exit_long_kf_diff = DecimalParameter(-5.0, 0.0, decimals=1, default=-2.0, space='sell', load=True, optimize=True)
+    exit_short_kf_diff = DecimalParameter(0.0, 5.0, decimals=1, default=2.0, space='sell', load=True, optimize=True)
 
     ssl_channel_down_index_pattern = 'ssl_channel_down_{0}'
     ssl_channel_up_index_pattern = 'ssl_channel_up_{0}'
@@ -230,16 +241,11 @@ class SSLChannelHyperOpt(IStrategy):
     sell_trigger = "ssl_channel_sell"
 
     # These values can be overridden in the config.
-    should_use_exit_signal = BooleanParameter(default=buy_params['should_use_exit_signal'], space='buy')
-    should_exit_profit_only = BooleanParameter(default=buy_params['should_exit_profit_only'], space='buy')
-    use_exit_signal = should_use_exit_signal.value
-    exit_profit_only = should_exit_profit_only.value
-    ignore_roi_if_entry_signal = shouldIgnoreRoi.value
+    use_exit_signal = True
+    exit_profit_only = False
+    ignore_roi_if_entry_signal = True
 
-    # Number of candles the strategy requires before producing valid signals
-    startup_candle_count: int = 200
-
-    use_custom_stoploss = shouldUseStopLoss.value
+    use_custom_stoploss = True
     profit_trigger = CategoricalParameter([0.002, 0.003, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1], default=sell_params['profit_trigger'], space='sell')
     maximum_stoploss = CategoricalParameter([0.002, 0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=sell_params['maximum_stoploss'], space='sell')
     minimum_stoploss = CategoricalParameter([0.002, 0.005, 0.01, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99], default=sell_params['minimum_stoploss'], space='sell')
@@ -264,7 +270,7 @@ class SSLChannelHyperOpt(IStrategy):
         :param side: 'long' or 'short' - indicating the direction of the proposed trade
         :return: A leverage amount, which is between 1.0 and max_leverage.
         """
-        return 5
+        return 1
 
     def custom_stoploss(self, pair: str, trade: 'Trade', current_time: datetime, current_rate: float,
                         current_profit: float, **kwargs) -> float:
@@ -384,7 +390,7 @@ class SSLChannelHyperOpt(IStrategy):
         pairs = self.dp.current_whitelist()
         # Assign tf to each pair so they can be downloaded and cached for strategy.
         informative_pairs = [(pair, '1d') for pair in pairs]
-        informative_pairs = [(pair, '1h') for pair in pairs]
+        informative_pairs += [(pair, '1h') for pair in pairs]
         # Optionally Add additional "static" pairs
         informative_pairs += [
                               ("BTC/USDT", "1d"),
@@ -479,8 +485,47 @@ class SSLChannelHyperOpt(IStrategy):
 
         # merge into normal timeframe
         dataframe = merge_informative_pair(dataframe, informative_1h, self.timeframe, self.inf_timeframe, ffill=True)
+        dataframe = self.populate_kalman_filter(dataframe, metadata)
 
         dataframe.fillna(0, inplace=True)
+
+        return dataframe
+    
+    def populate_kalman_filter(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        # Base pair informative timeframe indicators
+        curr_pair = metadata['pair']
+        informative = self.dp.get_pair_dataframe(pair=curr_pair, timeframe=self.inf_timeframe)
+
+        # Kalman Filter
+        
+        self.current_pair = curr_pair
+
+        # create if not already done
+        if not curr_pair in self.filter_list:
+            self.filter_list[curr_pair] = kalman_filter = KalmanFilter(
+                state_transition=1.0,
+                process_noise=2.0,
+                observation_model=1.0,
+                observation_noise=0.5
+            )
+            self.filter_init_list[curr_pair] = False
+
+
+        # set current filter (can't pass parameter to apply())
+        self.kalman_filter = self.filter_list[curr_pair]
+
+        informative['kf_model'] = informative['close'].rolling(window=self.kf_window).apply(self.model)
+        # informative['kf_predict'] = informative['kf_model'].rolling(window=self.kf_window).apply(self.predict)
+        # informative['stddev'] = informative['close'].rolling(window=self.kf_window).std()
+
+        # merge into normal timeframe
+        dataframe = merge_informative_pair(dataframe, informative, self.timeframe, self.inf_timeframe, ffill=True)
+
+        # calculate predictive indicators in shorter timeframe (not informative)
+
+        dataframe['kf_model'] = dataframe[f"kf_model_{self.inf_timeframe}"]
+        # dataframe['stddev'] = dataframe[f"stddev_{self.inf_timeframe}"]
+        dataframe['kf_model_diff'] = 100.0 * (dataframe['kf_model'] - dataframe['close']) / dataframe['close']
 
         return dataframe
     
@@ -529,47 +574,54 @@ class SSLChannelHyperOpt(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.init_index_names()
 
+        short_conditions = []
         long_conditions = []
+        dataframe.loc[:, 'exit_tag'] = ''
 
-        if self.sell_use_1d_cross.value:
-            long_conditions.append((dataframe['crossbelow_1d'] == True))
-        
-        if self.sell_use_1h_cross.value:
-            long_conditions.append(dataframe['crossbelow_1h'] == True)
+        # Long Processing
 
-        if self.sell_use_bb_trigger.value:
-            long_conditions.append(
-                    dataframe['ema3'] > dataframe['bb_upperband_1h']
-                )
+        # Kalman triggers
+        long_kf_cond = (
+                qtpylib.crossed_below(dataframe['kf_model_diff'], self.exit_long_kf_diff.value)
+        )
 
-        # # Check that volume is not 0
-        long_conditions.append(dataframe['volume'] > 0)
+        # Kalmans will spike on big gains, so try to constrain
+        long_spike_cond = (
+                dataframe['kf_model_diff'] > 2.0 * self.exit_long_kf_diff.value
+        )
+
+        long_conditions.append(long_kf_cond)
+        long_conditions.append(long_spike_cond)
+
+        # set exit tags
+        dataframe.loc[long_kf_cond, 'exit_tag'] += 'long_kf_exit '
 
         if long_conditions:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, long_conditions),
-                'exit_long'] = 1
+            dataframe.loc[reduce(lambda x, y: x & y, long_conditions), 'exit_long'] = 1
 
-        short_conditions = []
 
-        if self.sell_use_1d_cross.value:
-            short_conditions.append((dataframe['crossabove_1d'] == True))
-        
-        if self.sell_use_1h_cross.value:
-            long_conditions.append(dataframe['crossabove_1h'] == True)
+        # Short Processing
 
-        if self.sell_use_bb_trigger.value:
-            short_conditions.append(
-                    dataframe['ema3'] < dataframe['bb_upperband_1h']
-                )
+        # Kalman triggers
+        short_kf_cond = (
+            qtpylib.crossed_above(dataframe['kf_model_diff'], self.exit_short_kf_diff.value)
+        )
 
-        # # Check that volume is not 0
-        short_conditions.append(dataframe['volume'] > 0)
+
+        # Kalmans will spike on big gains, so try to constrain
+        short_spike_cond = (
+                dataframe['kf_model_diff'] < 2.0 * self.exit_short_kf_diff.value
+        )
+
+        # conditions.append(long_cond)
+        short_conditions.append(short_kf_cond)
+        short_conditions.append(short_spike_cond)
+
+        # set exit tags
+        dataframe.loc[short_kf_cond, 'exit_tag'] += 'short_kf_exit '
 
         if short_conditions:
-            dataframe.loc[
-                reduce(lambda x, y: x & y, short_conditions),
-                'exit_long'] = 1
+            dataframe.loc[reduce(lambda x, y: x & y, short_conditions), 'exit_short'] = 1
 
         return dataframe
     
@@ -648,65 +700,65 @@ class SSLChannelHyperOpt(IStrategy):
         # if self.use_coral.value:
         #     short_condition.append((dataframe[self.buy_coral_index_name] > dataframe['close']))
         
-        # if self.use_1d_cross.value:
-        #     short_condition.append((dataframe['crossbelow_1d'] == True))
+        if self.use_1d_cross.value:
+            short_condition.append((dataframe['crossbelow_1d'] == True))
         
-        # if self.use_1h_cross.value:
-        #     short_condition.append((dataframe['crossbelow_1h'] == True))
+        if self.use_1h_cross.value:
+            short_condition.append((dataframe['crossbelow_1h'] == True))
 
-        # if self.use_1d_guard.value:
-        #     short_condition.append(
-        #         (dataframe[f'fastd_1d'] > dataframe[f'fastk_1d'])
-        #     )
+        if self.use_1d_guard.value:
+            short_condition.append(
+                (dataframe[f'fastd_1d'] > dataframe[f'fastk_1d'])
+            )
 
-        # if self.use_macd_as_guard.value == True:
-        #     short_condition.append(dataframe[self.macd_histogram_index_name] < 0)
+        if self.use_macd_as_guard.value == True:
+            short_condition.append(dataframe[self.macd_histogram_index_name] < 0)
         
-        # if self.use_sar_as_guard.value == True:
-        #     short_condition.append(dataframe[self.sar_index_name] > dataframe['close'])
+        if self.use_sar_as_guard.value == True:
+            short_condition.append(dataframe[self.sar_index_name] > dataframe['close'])
 
-        # if self.use_1h_guard.value:
-        #     short_condition.append(
-        #         (dataframe[f'fastd_1h'] > dataframe[f'fastk_1h'])
-        #     )
+        if self.use_1h_guard.value:
+            short_condition.append(
+                (dataframe[f'fastd_1h'] > dataframe[f'fastk_1h'])
+            )
         
-        # short_condition.append(
-        #     ( 
-        #         (dataframe['volume'] > 0)
-        #     )
-        # )
+        short_condition.append(
+            ( 
+                (dataframe['volume'] > 0)
+            )
+        )
 
-        # if self.use_bb_trigger.value:
-        #     short_condition.append(
-        #             # self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
-        #             (dataframe['close'] > dataframe['bb_middleband']) &
-        #             (dataframe['high'].shift(1) > dataframe['bb_middleband'].shift(1))
-        #         )
+        if self.use_bb_trigger.value:
+            short_condition.append(
+                    # self.ssl_cross_below(dataframe, self.buy_small_ssl_channel_up_index_name, self.buy_small_ssl_channel_down_index_name)
+                    (dataframe['close'] > dataframe['bb_middleband']) &
+                    (dataframe['high'].shift(1) > dataframe['bb_middleband'].shift(1))
+                )
         
-        # if self.use_stoc_trigger.value:
-        #     short_condition.append(
-        #         (qtpylib.crossed_below(dataframe['fastk'], dataframe['fastd']))
-        #     )
+        if self.use_stoc_trigger.value:
+            short_condition.append(
+                (qtpylib.crossed_below(dataframe['fastk'], dataframe['fastd']))
+            )
 
-        # if self.use_coral_color_change_as_trigger.value:
-        #     short_condition.append(
-        #         self.red_from_green(dataframe[self.buy_coral_index_name])
-        #     )
+        if self.use_coral_color_change_as_trigger.value:
+            short_condition.append(
+                self.red_from_green(dataframe[self.buy_coral_index_name])
+            )
 
-        # if self.use_sar_ema_cross.value:
-        #     short_condition.append (
-        #         qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sar_index_name])
-        #     )
+        if self.use_sar_ema_cross.value:
+            short_condition.append (
+                qtpylib.crossed_below(dataframe['ema3'], dataframe[self.sar_index_name])
+            )
             
-        # if self.use_macd_crossover.value:
-        #     short_condition.append(
-        #         qtpylib.crossed_below(dataframe['ema3'], dataframe[self.macd_histogram_index_name])
-        #     )
+        if self.use_macd_crossover.value:
+            short_condition.append(
+                qtpylib.crossed_below(dataframe['ema3'], dataframe[self.macd_histogram_index_name])
+            )
         
-        # if short_condition:
-        #         dataframe.loc[
-        #             reduce(lambda x, y: x & y, short_condition),
-        #             'enter_short'] = 1
+        if short_condition:
+                dataframe.loc[
+                    reduce(lambda x, y: x & y, short_condition),
+                    'enter_short'] = 1
         
         return dataframe
 
@@ -785,6 +837,101 @@ class SSLChannelHyperOpt(IStrategy):
 
     def red_from_green(self, dataframe_1d) -> bool:
         return self.is_green(dataframe_1d.shift(1)) & self.is_red(dataframe_1d)
+    
+    def madev(self, d, axis=None):
+        """ Mean absolute deviation of a signal """
+        return np.mean(np.absolute(d - np.mean(d, axis)), axis)
+
+    def model(self, a: np.ndarray) -> np.float:
+        # scale the data
+        standardized = a.copy()
+        w_mean = np.mean(standardized)
+        w_std = np.std(standardized)
+        scaled = (standardized - w_mean) / w_std
+        scaled.fillna(0, inplace=True)
+
+        # init filter if needed
+        if not self.filter_init_list[self.current_pair]:
+            self.filter_init_list[self.current_pair] = True
+            self.filter_list[self.current_pair] = self.filter_list[self.current_pair].em(scaled, n_iter=6)
+
+        # get the Kalman model
+        restored_sig = self.kalmanModel(scaled, self.kalman_filter)
+
+        # re-trend
+        model = (restored_sig * w_std) + w_mean
+
+        length = len(model)
+        return model[length-1]
+
+    def scaledModel(self, a: np.ndarray) -> np.float:
+        #must return scalar, so just calculate prediction and take last value
+        # model = self.KalmanModel(np.array(a))
+
+        # de-trend the data
+        w_mean = a.mean()
+        w_std = a.std()
+        x_notrend = (a - w_mean) / w_std
+
+        # get Kalman model of data
+        model = self.KalmanModel(x_notrend)
+
+        length = len(model)
+        return model[length-1]
+
+    def scaledData(self, a: np.ndarray) -> np.float:
+
+        # scale the data
+        standardized = a.copy()
+        w_mean = np.mean(standardized)
+        w_std = np.std(standardized)
+        scaled = (standardized - w_mean) / w_std
+        # scaled.fillna(0, inplace=True)
+
+        length = len(scaled)
+        return scaled.ravel()[length-1]
+
+    def kalmanModel(self, data, kfilter: KalmanFilter):
+
+        n = len(data)
+        x = np.array(data)
+
+        # kfilter = kfilter.em(data, n_iter=6)
+
+        # mean, cov = kfilter.filter(x)
+        # kfilter.filter_update(mean[0], cov[0])
+        #
+        # mean = mean.squeeze()
+        # print("model(", len(mean), "): ", mean)
+
+        # predict next close
+        smoothed = kfilter.smooth(x)
+        pr_mean = smoothed.observations.mean
+        restored_sig = pr_mean.squeeze()
+        # print ("Predict(", len(restored_sig), "): ", restored_sig)
+
+
+        ldiff = len(restored_sig) - len(x)
+        model = restored_sig[ldiff:]
+
+        return model
+    
+    def predict(self, a: np.ndarray) -> np.float:
+
+        # predicts the next value using polynomial extrapolation
+
+        # a.fillna(0)
+
+        # fit the supplied data
+        # Note: extrapolation is notoriously fickle. Be careful
+        length = len(a)
+        x = np.arange(length)
+        f = scipy.interpolate.UnivariateSpline(x, a, k=5)
+
+        # predict 1 step ahead
+        predict = f(length)
+
+        return predict
 
 def coral_trend(dataframe: DataFrame, sm: int, cd: int) -> DataFrame:
     di = (sm - 1.0) / 2.0 + 1.0
