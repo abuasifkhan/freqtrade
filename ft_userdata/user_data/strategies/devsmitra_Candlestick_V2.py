@@ -1,7 +1,7 @@
 # --- Do not remove these libs ---
 from datetime import datetime
 from typing import Any, Optional
-from freqtrade.strategy import IStrategy, stoploss_from_absolute
+from freqtrade.strategy import IStrategy, stoploss_from_absolute, merge_informative_pair
 from pandas import DataFrame
 import talib.abstract as ta
 import freqtrade.vendor.qtpylib.indicators as qtpylib
@@ -21,27 +21,14 @@ It performs very well on the 20221001-20221014 timerange (in backtest !).
 On 20220901-20221014 timerange : +347.61% and Drawdown = 2.44%
 """
 
-class Candlestick(IStrategy):
+class Candlestick_V2(IStrategy):
     cache: Any = {}
 
     INTERFACE_VERSION: int = 3
     process_only_new_candles: bool = False
     # Optimal timeframe for the strategy
-    timeframe = '5m'
-
-    # Optional order type mapping.
-    order_types = {
-        'entry': 'limit',
-        'exit': 'limit',
-        'stoploss': 'market',
-        'stoploss_on_exchange': False
-    }
-
-    # Optional order time in force.
-    order_time_in_force = {
-        'entry': 'gtc',
-        'exit': 'gtc'
-    }
+    timeframe = '1m'
+    informative_timeframe = '5m'
 
     minimal_roi = {
         "0": 1
@@ -51,15 +38,23 @@ class Candlestick(IStrategy):
     stoploss = -0.1
     use_custom_stoploss = True
 
+    # def leverage(self, pair: str, current_time: datetime, current_rate: float, proposed_leverage: float, max_leverage: float, entry_tag: Optional[str], side: str, **kwargs) -> float:
+    #     return 5
+
+    def informative_pairs(self):
+        pairs = self.dp.current_whitelist()
+        informative_pairs = [(pair, self.informative_timeframe) for pair in pairs]
+        return informative_pairs
+
     def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime,
                         current_rate: float, current_profit: float, **kwargs) -> float:
         sl = 4.1
         dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
         candle = dataframe.iloc[-1].squeeze()   
         def get_stoploss(atr):
-            return stoploss_from_absolute(current_rate - (candle['atr'] * atr), current_rate, is_short=trade.is_short)
+            return stoploss_from_absolute(current_rate - (candle['atr_5m'] * atr), current_rate, is_short=trade.is_short)
 
-        if current_rate > (trade.open_rate + (candle['atr'] * 1.5 * sl)):
+        if current_rate > (trade.open_rate + (candle['atr_5m'] * 1.5 * sl)):
             return -.0001
         return get_stoploss(sl) * -1
 
@@ -73,27 +68,32 @@ class Candlestick(IStrategy):
 
     def get_trend(self, dataframe: DataFrame, metadata: dict):
         pair = metadata['pair']
-        # prev = self.cache.get(pair,  {'date': dataframe.iloc[-2]['date'], 'Trend': 0})
-        # date = dataframe.iloc[-1]['date']
-        # if (date != prev['date']):
-        df = identify_df_trends(dataframe, 'close', window_size=3)
-        # self.cache[pair] = {'date': date, 'Trend': df['Trend']}
-        # else:
-            # dataframe['Trend'] = prev['Trend']
-        return df
+        prev = self.cache.get(pair,  {'date': dataframe.iloc[-2]['date'], 'Trend': 0})
+        date = dataframe.iloc[-1]['date']
+        if (date != prev['date']):
+            df = identify_df_trends(dataframe, 'close', window_size=3)
+            self.cache[pair] = {'date': date, 'Trend': df['Trend']}
+        else:
+            dataframe['Trend'] = prev['Trend']
+        
+        return dataframe
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        dataframe = self.get_trend(dataframe, metadata)
-        dataframe['adx'] = ta.ADX(dataframe, timeperiod=14)
-        dataframe['atr'] = ta.ATR(dataframe)
+        informative = self.dp.get_pair_dataframe(pair=metadata['pair'], timeframe=self.informative_timeframe)
+        informative = self.get_trend(informative, metadata)
+
+        # self.get_trend(dataframe, metadata)
+        informative['adx'] = ta.ADX(informative, timeperiod=14)
+        informative['atr'] = ta.ATR(informative)
+        dataframe = merge_informative_pair(dataframe, informative, self.timeframe, self.informative_timeframe, ffill=True)
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         crossed = False
         for i in range(0, 2):
             crossed = crossed | (
-                qtpylib.crossed_above(dataframe.shift(i)['Trend'], 0) &
-                (dataframe.shift(i)['adx'] > 20)
+                qtpylib.crossed_above(dataframe.shift(i)['Trend_5m'], 0) &
+                (dataframe.shift(i)['adx_5m'] > 20)
             )
 
         dataframe.loc[
@@ -105,9 +105,9 @@ class Candlestick(IStrategy):
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         dataframe.loc[
             (
-                (qtpylib.crossed_below(dataframe['adx'], 25) & (dataframe['Trend'] == -1)) |
-                (qtpylib.crossed_below(dataframe['Trend'], 0) & (dataframe['adx'] < 25)) |
-                (qtpylib.crossed_below(dataframe.shift()['Trend'], 0) & (dataframe['adx'] < 25))
+                (qtpylib.crossed_below(dataframe['adx_5m'], 25) & (dataframe['Trend_5m'] == -1)) |
+                (qtpylib.crossed_below(dataframe['Trend_5m'], 0) & (dataframe['adx_5m'] < 25)) |
+                (qtpylib.crossed_below(dataframe.shift()['Trend_5m'], 0) & (dataframe['adx_5m'] < 25))
             ),
             'exit_long'] = 1
         return dataframe
