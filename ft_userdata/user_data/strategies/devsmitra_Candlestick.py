@@ -59,13 +59,13 @@ class Candlestick(IStrategy):
 
     def get_trend(self, dataframe: DataFrame, metadata: dict):
         pair = metadata['pair']
-        prev = self.cache.get(pair,  {'date': dataframe.iloc[-2]['date'], 'Trend': 0})
-        date = dataframe.iloc[-1]['date']
-        if (date != prev['date']):
-            df = identify_df_trends(dataframe, 'close', window_size=3)
-            self.cache[pair] = {'date': date, 'Trend': df['Trend']}
-        else:
-            dataframe['Trend'] = prev['Trend']
+        # prev = self.cache.get(pair,  {'date': dataframe.iloc[-2]['date'], 'Trend': 0})
+        # date = dataframe.iloc[-1]['date']
+        # if (date != prev['date']):
+        df = identify_df_trends(dataframe, 'close', window_size=3)
+        # self.cache[pair] = {'date': date, 'Trend': df['Trend']}
+        # else:
+            # dataframe['Trend'] = prev['Trend']
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
         self.get_trend(dataframe, metadata)
